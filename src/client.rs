@@ -1,7 +1,3 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -10,7 +6,8 @@ use ed25519_dalek::Signer;
 use reqwest::{self, StatusCode};
 
 use crate::config::ConfigClient;
-use crate::{DdnsJSON, signatures};
+use crate::ddns;
+use crate::signatures;
 
 pub fn handle_client(
     dry_run: bool,
@@ -39,7 +36,7 @@ pub fn handle_client(
     let ip = query_for_ip().context("failed to get IP address of this machine")?;
 
     /* Create DDNS struct json */
-    let ddns_obj = DdnsJSON {
+    let ddns_obj = ddns::DdnsJSON {
         domain: conf.domain,
         ip: ip,
     };
@@ -129,28 +126,4 @@ fn sign_object(
         .to_owned();
 
     Ok(signed_bytes)
-}
-
-fn write_ddns_to_disk<P>(file_name: P, file_bytes: &Vec<u8>) -> Result<PathBuf, anyhow::Error>
-where
-    P: AsRef<Path>,
-{
-    let mut temp_file = std::env::temp_dir();
-    temp_file.push(file_name);
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(&temp_file)
-        .with_context(|| {
-            format!(
-                "failed to open ddns file for writing: {}",
-                temp_file.to_string_lossy()
-            )
-        })?;
-
-    file.write_all(&file_bytes)
-        .with_context(|| format!("failed to write ddns file: {}", temp_file.to_string_lossy()))?;
-
-    Ok(temp_file)
 }

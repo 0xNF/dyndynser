@@ -1,5 +1,5 @@
 use anyhow::Context;
-use ed25519_dalek::{SECRET_KEY_LENGTH, pkcs8::DecodePrivateKey};
+use ed25519_dalek::pkcs8::DecodePrivateKey;
 
 #[derive(Debug)]
 pub struct ConfigClient {
