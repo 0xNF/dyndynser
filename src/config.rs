@@ -1,5 +1,5 @@
 use anyhow::Context;
-use ed25519_dalek::SECRET_KEY_LENGTH;
+use ed25519_dalek::{SECRET_KEY_LENGTH, pkcs8::DecodePrivateKey};
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -25,6 +25,7 @@ impl ConfigClient {
         ddns_json_dir: &str,
         domain: &str,
         key_path: &str,
+        signing_key_password: Option<&str>,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
         let robocerts_bucket = robocerts_bucket.trim();
@@ -47,22 +48,56 @@ impl ConfigClient {
         }
 
         /* Find and load the keyfile bytes */
-        let key_bytes = std::fs::read(key_path).context("Invalid key_path")?;
+        let key_str = std::fs::read_to_string(key_path).context("Invalid key_path")?;
 
-        if key_bytes.len() != ed25519_dalek::SECRET_KEY_LENGTH {
+        let signing_key: ed25519_dalek::SigningKey = if key_str
+            .starts_with("-----BEGIN OPENSSH PRIVATE KEY-----")
+        {
+            log::info!("Signing key is an OpenSSH Key");
+            let mut sshkey = ssh_key::PrivateKey::from_openssh(&key_str)?;
+            match (sshkey.is_encrypted(), signing_key_password) {
+                (true, None) => {
+                    log::info!(
+                        "key is encrypted, and no password was supplied. Trying a blank decryption"
+                    );
+                    /* try a blank decryption attempt */
+                    const ZERO_BYTE: [u8; 0] = [];
+                    sshkey = sshkey.decrypt(ZERO_BYTE).context("Key is encrypted, and no password was supplied. Tried an empty decryption attempt, but a password is required")?;
+                }
+                (true, Some(pw_str)) => {
+                    log::info!("key is encrypted, and a password was supplied. trying decryption");
+                    let pw_bytes = pw_str.as_bytes();
+                    sshkey = sshkey
+                        .decrypt(pw_bytes)
+                        .context("Key is encrypted, but supplied password did not match")?;
+                }
+                _ => {
+                    log::info!("Key is not encrypted");
+                }
+            }
+            let bytes = sshkey
+                .key_data()
+                .ed25519()
+                .ok_or(anyhow::anyhow!(
+                    "signing key was not ed25519, we only support ed25519 keys"
+                ))?
+                .private
+                .to_bytes();
+
+            ed25519_dalek::SigningKey::from_bytes(&bytes)
+        } else if key_str.starts_with("-----BEGIN PRIVATE KEY-----") {
+            log::info!("Key was non-openssh signing key");
+            ed25519_dalek::SigningKey::from_pkcs8_pem(&key_str)
+                .context("failed to decode pkcs8 pem bytes from signing key")?
+        } else {
             Err(anyhow::anyhow!(
-                "ed25519 signing key is invalid length: {}",
-                key_bytes.len()
-            ))?;
-        }
-        let arr: &[u8; SECRET_KEY_LENGTH] = key_bytes.as_array().ok_or(anyhow::anyhow!(
-            "invalid secret key length after unwrap, this is likely a bug"
-        ))?;
-        let key = ed25519_dalek::SigningKey::from_bytes(arr);
+                "Supplied signing key was not a valid supported format"
+            ))?
+        };
 
         Ok(ConfigClient {
             domain: domain.to_lowercase(),
-            signing_key: key,
+            signing_key,
             s3_robocerts_bucket: robocerts_bucket.to_owned(),
             s3_robocerts_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
