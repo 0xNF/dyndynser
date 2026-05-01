@@ -128,6 +128,8 @@ dependencies = [
  "base64",
  "http",
  "log",
+ "serde",
+ "serde_json",
  "url",
 ]
 
@@ -143,6 +145,7 @@ version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3b85155d265df828f84e53886ed9e427aed979dd8a39f5b8b2162c77e142d7"
 dependencies = [
+ "attohttpc",
  "home",
  "log",
  "quick-xml",
