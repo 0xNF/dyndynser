@@ -121,6 +121,11 @@ aws s3api list-objects-v2 --bucket $s3bucket
 
 ## Server
 
+The server side is architected such that many errors are non-blocking. The only things that are show-stoppers are if S3 can't be contacted, or if the ddns_route53 file does not exist.
+Other errors, such as malformed JSON ddns requests, malformed keys, or mismatched signatures, only cause errors to be reported, but do not terminate the program.
+
+This is so that invalid configurations by the client can't DOS the service, and records will continue to be updated.
+
 ### Help
 ```bash
 Usage: dyndynser server <S3_ROBOCERTS_BUCKET> <DDNS_FILE_PATH> <S3_DDNS_JSON_DIR> <KEYS_SEARCH_PATH> <REGION>

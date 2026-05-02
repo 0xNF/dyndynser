@@ -118,7 +118,12 @@ fn get_public_key_map(
         };
 
         /* Strip .pub from the name, to match the key to the domain */
-        let certname = fname.strip_suffix(".pub").context("failed to strio .pub from key, this is an asserttion failure and the developer should be contacted")?;
+        log::debug!(
+            "Stripping .{} suffix from {}",
+            signatures::PUBLIC_KEY_EXT,
+            fname
+        );
+        let certname = fname.strip_suffix(&format!(".{}", signatures::PUBLIC_KEY_EXT)).context("failed to strip .pub from key, this is an asserttion failure and the developer should be contacted")?;
         hm.insert(certname.to_owned(), vk);
     }
 
@@ -176,15 +181,26 @@ pub fn handle_server(
     let mut results = fetch_ddns_jsons_from_s3(&conf)
         .context("failed to perform S3 read portion of server operation")?;
 
+    /* Check any ddns files to operate over  */
     if results.unverified_jsons.is_empty() {
         println!("No ddns.json files found, nothing to do.");
         return Ok(());
     }
     println!("Found {} .ddns.json files", results.unverified_jsons.len());
 
+    /* Get Keys */
     let domain_key_map =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
+    log::debug!("key map: {:?}", &domain_key_map);
+
+    /* Check Keys exist */
+    if domain_key_map.is_empty() {
+        println!("No public keys found, nothing to validate.");
+        return Ok(());
+    }
+
+    /* Validate each request by finding a corresponding Public Key */
     for signed_json in results.unverified_jsons.into_iter() {
         log::info!(
             "Checking signature of {} ddns request",
@@ -218,12 +234,20 @@ pub fn handle_server(
         .context("ddns_file_path existed but could not be parsed into a YAML structure")?;
 
     for valid_request in results.verified_jsons {
+        let domain_with_trailing_dot = if valid_request.domain.ends_with('.') {
+            valid_request.domain
+        } else {
+            log::debug!("domain didn't end with '.', adding one ourselves");
+            format!("{}.", valid_request.domain)
+        };
         let new_ddns_record = DdnsRoute53Record {
-            name: valid_request.domain,
+            name: domain_with_trailing_dot,
             record_type: if valid_request.ip.is_ipv4() {
                 String::from("A")
-            } else {
+            } else if valid_request.ip.is_ipv6() {
                 String::from("AAAA")
+            } else {
+                String::from("?")
             },
             time_to_live: Some(300),
         };
