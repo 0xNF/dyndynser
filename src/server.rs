@@ -163,6 +163,7 @@ pub fn handle_server(
     .context("failed to parse server config")?;
 
     if conf.is_dry_run {
+        println!("Performing a server Dry Run");
         log::info!("Doing a dry run, will not actually update the ddns file");
     }
 
@@ -215,6 +216,11 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
         .context("invalid AWS region found during S3 write")?;
     let bucket = s3::Bucket::new(&conf.s3_robocerts_bucket, region, credentials)
         .context("failed to rerieve s3 credentials")?;
+
+    println!(
+        "Querying Bucket: {}/{}",
+        &conf.s3_robocerts_bucket, &conf.s3_bucket_ddns_json_directory
+    );
 
     /* S3 iteration  */
     let mut continuation_token: Option<String> = None;

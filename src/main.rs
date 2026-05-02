@@ -20,8 +20,9 @@ pub enum SubCommands {
         is_dry_run: bool,
 
         s3_bucket: String,
-        ddns_file_path: String,
         s3_ddns_json_dir: String,
+
+        ddns_file_path: String,
         keys_search_path: String,
 
         #[arg(name = "region")]
