@@ -199,7 +199,7 @@ pub fn handle_server(
             }
             Err(e) => {
                 log::error!(
-                    "Could not validate '{}' request: {}",
+                    "Could not validate '{}' request: {:?}",
                     &signed_json.payload.domain,
                     e,
                 );
@@ -243,7 +243,7 @@ pub fn handle_server(
         .context("failed to serialize route53 config back into yaml bytes")?;
 
     if conf.is_dry_run {
-        println!("Will write this yaml:\n{}", yaml_str);
+        println!("Will write this yaml:\n```yaml\n{}\n```", yaml_str);
         return Ok(());
     }
 
