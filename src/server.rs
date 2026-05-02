@@ -284,6 +284,11 @@ pub fn handle_server(
 
     if conf.is_dry_run {
         println!("Will write this yaml:\n```yaml\n{}\n```", yaml_str);
+        println!();
+        // println!(
+        //     "will delete the following s3 bucket items: {}",
+        //     results.unverified_jsons
+        // );
         return Ok(());
     }
 

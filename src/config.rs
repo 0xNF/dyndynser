@@ -56,11 +56,13 @@ impl ConfigClient {
         /* Find and load the keyfile bytes */
         let key_str = std::fs::read_to_string(key_path).context("Invalid key_path")?;
 
+        let key_str = key_str.trim();
+
         let signing_key: ed25519_dalek::SigningKey = if key_str
             .starts_with(signatures::OPENSSH_PREFIX_PRIVATE_KEY)
         {
             log::info!("Signing key is an OpenSSH Key");
-            let mut sshkey = ssh_key::PrivateKey::from_openssh(&key_str)?;
+            let mut sshkey = ssh_key::PrivateKey::from_openssh(key_str)?;
             match (sshkey.is_encrypted(), signing_key_password) {
                 (true, None) => {
                     log::info!(
@@ -93,7 +95,7 @@ impl ConfigClient {
             ed25519_dalek::SigningKey::from_bytes(&bytes)
         } else if key_str.starts_with(signatures::OPENSSL_PREFIX_PRIVATE_KEY) {
             log::info!("Key was non-openssh signing key");
-            ed25519_dalek::SigningKey::from_pkcs8_pem(&key_str)
+            ed25519_dalek::SigningKey::from_pkcs8_pem(key_str)
                 .context("failed to decode pkcs8 pem bytes from signing key")?
         } else {
             Err(anyhow::anyhow!(
