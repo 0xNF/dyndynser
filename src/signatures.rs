@@ -5,7 +5,7 @@ use serde::{
 use std::fmt;
 
 pub const PUBLIC_KEY_EXT: &str = "pub";
-pub const PRIVATE_KEY_EXT: &str = "priv";
+pub const PUBLIC_CERT_EXT: &str = "crt";
 pub const OPENSSL_PREFIX_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----";
 pub const OPENSSL_PREFIX_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----";
 pub const OPENSSH_PREFIX_PRIVATE_KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----";

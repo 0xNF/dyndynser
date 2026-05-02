@@ -1,7 +1,6 @@
 use anyhow::Context;
-use ed25519_dalek::pkcs8::DecodePrivateKey;
 
-use crate::{keys, signatures};
+use crate::keys;
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -54,7 +53,7 @@ impl ConfigClient {
         }
 
         /* Find and load the keyfile bytes */
-        let key_bytes = std::fs::read(key_path).context("invalid key_path")?;
+        let key_bytes = keys::read_file_limited(key_path, 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
         let signing_key = keys::load_ed25519_private_key(&key_bytes, signing_key_password)?;
 
         Ok(ConfigClient {
@@ -140,14 +139,8 @@ impl ConfigServer {
 #[cfg(test)]
 mod test {
     use ed25519_dalek::pkcs8::DecodePrivateKey;
-    use x509_cert::{
-        der::{
-            DecodePem,
-            asn1::{PrintableStringRef, Utf8StringRef},
-            oid::db::rfc4519::COMMON_NAME,
-        },
-        *,
-    };
+
+    use crate::keys;
 
     #[test]
     fn test_load_private_ed25519_openssl_key() {
@@ -180,54 +173,9 @@ eMuhW+wTWQ==
 -----END CERTIFICATE-----
 ";
 
-        use ed25519_dalek::VerifyingKey;
-
-        let cert = Certificate::from_pem(CERT.trim());
-        assert!(cert.is_ok(), "expected pem encoded x509 cert to load");
-        let cert = cert.unwrap();
-
-        // Extract verifying key from the cert's SPKI, not from the signing key
-        let spki = &cert.tbs_certificate.subject_public_key_info;
-
-        let pki = spki.subject_public_key.as_bytes();
-        assert!(pki.is_some(), "expected public bytes to be extractable");
-
-        let pki = pki.unwrap();
-        let pub_key_bytes: [u8; 32] = pki.try_into().unwrap();
-
-        let verifying_key = VerifyingKey::from_bytes(&pub_key_bytes);
-        assert!(
-            verifying_key.is_ok(),
-            "expected verifying key to be parsed out of public key bytes"
-        );
-        let verifying_key = verifying_key.unwrap();
-
-        let cn_atv = cert
-            .tbs_certificate
-            .subject
-            .0
-            .iter()
-            .flat_map(|rdn| rdn.0.iter())
-            .find(|atv| atv.oid == COMMON_NAME);
-
-        assert!(cn_atv.is_some(), "expected CommonName ATV to be unwrapped");
-        let cn_atv = cn_atv.unwrap();
-
-        let common_name = cn_atv
-            .value
-            .decode_as::<Utf8StringRef<'_>>()
-            .map(|s| s.as_str().to_owned())
-            .or_else(|_| {
-                cn_atv
-                    .value
-                    .decode_as::<PrintableStringRef<'_>>()
-                    .map(|s| s.as_str().to_owned())
-            });
-
-        assert!(common_name.is_ok(), "expected CommonName to exist");
-
-        let common_name = common_name.unwrap();
-
-        assert_eq!("03964696.graviorobotics.com", common_name);
+        let certmatch = keys::load_ed25519_certificate_pem(CERT.as_bytes());
+        assert!(certmatch.is_ok());
+        let certmatch = certmatch.unwrap();
+        assert_eq!("03964696.graviorobotics.com", certmatch.common_name);
     }
 }

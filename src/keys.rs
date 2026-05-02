@@ -1,3 +1,6 @@
+use std::io::Read;
+use std::path::Path;
+
 use anyhow::{Context, Ok};
 use ed25519_dalek::pkcs8::DecodePublicKey;
 use ed25519_dalek::{VerifyingKey, pkcs8::DecodePrivateKey};
@@ -157,4 +160,31 @@ fn load_ed25519_openssl_key(key_bytes: &[u8]) -> Result<ed25519_dalek::SigningKe
     let s: &str = std::str::from_utf8(key_bytes).context("not a valid utf8 string")?;
     ed25519_dalek::SigningKey::from_pkcs8_pem(s)
         .context("failed to decode pkcs8 pem bytes from signing key")
+}
+
+pub fn read_file_limited<P: AsRef<Path>>(
+    path: P,
+    max_bytes: u64,
+) -> Result<Vec<u8>, anyhow::Error> {
+    let size = std::fs::metadata(&path)?.len();
+
+    if size > max_bytes {
+        return Err(anyhow::anyhow!(format!(
+            "File too large: {} bytes (limit: {} bytes)",
+            size, max_bytes
+        )));
+    }
+
+    let file = std::fs::File::open(path)?;
+    let mut buffer = Vec::with_capacity(size as usize);
+
+    std::io::BufReader::new(file)
+        .take(max_bytes)
+        .read_to_end(&mut buffer)
+        .context(anyhow::anyhow!(format!(
+            "File too large: {} bytes (limit: {} bytes)",
+            size, max_bytes
+        )))?;
+
+    Ok(buffer)
 }

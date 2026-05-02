@@ -44,6 +44,10 @@ fn get_public_key_map(
     for entry in list_pub_key_files {
         let fname = entry.file_name().to_string_lossy().to_string();
         log::debug!("attempting to parse key found at {}", &fname);
+
+        let key_bytes =
+            keys::read_file_limited(entry.path(), 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+
         let fbytes = std::fs::read(entry.path())
             .with_context(|| format!("failed to read key file: {}", entry.path().display()));
 
