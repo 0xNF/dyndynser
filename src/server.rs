@@ -135,6 +135,10 @@ fn check_valid_ddns_request(
     domain_key_map: &HashMap<String, VerifyingKey>,
 ) -> Result<(), anyhow::Error> {
     /* Look for Matching Key of domain */
+    log::info!(
+        "looking for key that matches '{}'",
+        &signed_json.payload.domain
+    );
     let vk = domain_key_map
         .get(&signed_json.payload.domain)
         .ok_or(Err(anyhow::anyhow!(
@@ -206,7 +210,7 @@ pub fn handle_server(
     /* Validate each request by finding a corresponding Public Key */
     for signed_json in results.unverified_jsons.into_iter() {
         log::info!(
-            "Checking signature of {} ddns request",
+            "Checking signature of '{}' ddns request",
             &signed_json.payload.domain
         );
         match check_valid_ddns_request(&signed_json, &domain_key_map)
@@ -331,7 +335,7 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
             /* Check key is an expected .ddns.json request file */
             if !x.key.ends_with(ddns::DDNS_JSON_FILE_EXT) {
                 eprintln!(
-                    "invalid s3 object key, not a ddns '{}' file: {}",
+                    "invalid s3 object key, not a ddns '{}' file: '{}'",
                     ddns::DDNS_JSON_FILE_EXT,
                     &x.key
                 );
