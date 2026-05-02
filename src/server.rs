@@ -215,21 +215,29 @@ pub fn handle_server(
     /* trigger a ddns request automatically via a Process Command */
 
     println!("Summary\n-------\n");
-    println!("Failed S3 Fetches:");
-    for fail in results.failed_s3_fetches {
-        println!("*\t{}: {}", fail.0, fail.1);
+    if !results.failed_s3_fetches.is_empty() {
+        println!("Failed S3 Fetches:");
+        for fail in results.failed_s3_fetches {
+            println!("*\t{}: {:#?}", fail.0, fail.1);
+        }
     }
-    println!("Failed JSON Deserializations:");
-    for fail in results.failed_json_deserdes {
-        println!("*\t{}: {}", fail.0, fail.1);
+    if results.failed_json_deserdes.is_empty() {
+        println!("Failed JSON Deserializations:");
+        for fail in results.failed_json_deserdes {
+            println!("*\t{}: {:#?}", fail.0, fail.1);
+        }
     }
-    println!("Failed Signing Key Parses");
-    for fail in results.failed_key_parses {
-        println!("*\t{}: {}", fail.0, fail.1);
+    if !results.failed_key_parses.is_empty() {
+        println!("Failed Signing Key Parses");
+        for fail in results.failed_key_parses {
+            println!("*\t{}: {:#?}", fail.0, fail.1);
+        }
     }
-    println!("Failed Signature Checks");
-    for fail in results.failed_signature_checks {
-        println!("*\t{}: {}", fail.0, fail.1);
+    if !results.failed_signature_checks {
+        println!("Failed Signature Checks");
+        for fail in results.failed_signature_checks {
+            println!("*\t{}: {:#?}", fail.0, fail.1);
+        }
     }
 
     Ok(())
