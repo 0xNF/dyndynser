@@ -56,8 +56,8 @@ fn get_public_key_map(
         let fbytes = fbytes.unwrap();
 
         let vk = if fbytes.starts_with(signatures::OPENSSH_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::info!(
-                "key at {} is an OpenSSH public key, will parse as such",
+            log::debug!(
+                "key at {} looks like an OpenSSH public key, will try to parse it",
                 &fname
             );
             let pubkey = ssh_key::PublicKey::from_openssh(&String::from_utf8_lossy(&fbytes))
@@ -178,6 +178,7 @@ pub fn handle_server(
         println!("No ddns.json files found, nothing to do.");
         return Ok(());
     }
+    println!("Found {} .ddns.json files", results.signed_jsons.len());
 
     let domain_key_map =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
@@ -191,12 +192,12 @@ pub fn handle_server(
             .context("failed to check signing key request")
         {
             Ok(_) => {
-                log::info!("Validatd '{}' domain requst", &signed_json.payload.domain);
+                log::info!("Validated '{}' domain requst", &signed_json.payload.domain);
                 results.valid_json.push(signed_json.payload);
             }
             Err(e) => {
                 log::error!(
-                    "Could not validate '{}' requst",
+                    "Could not validate '{}' request",
                     &signed_json.payload.domain
                 );
                 results.failed_signature_checks.push((
@@ -212,6 +213,24 @@ pub fn handle_server(
     /* Write the valid requests to it, and write file back to disk */
 
     /* trigger a ddns request automatically via a Process Command */
+
+    println!("Summary\n-------\n");
+    println!("Failed S3 Fetches:");
+    for fail in results.failed_s3_fetches {
+        println!("*\t{}: {}", fail.0, fail.1);
+    }
+    println!("Failed JSON Deserializations:");
+    for fail in results.failed_json_deserdes {
+        println!("*\t{}: {}", fail.0, fail.1);
+    }
+    println!("Failed Signing Key Parses");
+    for fail in results.failed_key_parses {
+        println!("*\t{}: {}", fail.0, fail.1);
+    }
+    println!("Failed Signature Checks");
+    for fail in results.failed_signature_checks {
+        println!("*\t{}: {}", fail.0, fail.1);
+    }
 
     Ok(())
 }
