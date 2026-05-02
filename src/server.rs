@@ -9,6 +9,7 @@ use ed25519_dalek::{
 use crate::{
     config::*,
     ddns::{self, DDNSRoute53Config, DdnsJSON, DdnsRoute53Record},
+    keys,
     signatures::{self, SignedJSON},
 };
 
@@ -55,66 +56,13 @@ fn get_public_key_map(
         }
         let fbytes = fbytes.unwrap();
 
-        let vk = if fbytes.starts_with(signatures::OPENSSH_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::debug!(
-                "key at {} looks like an OpenSSH public key, will try to parse it",
-                &fname
-            );
-            let pubkey = ssh_key::PublicKey::from_openssh(&String::from_utf8_lossy(&fbytes))
-                .context("failed to parse key as openssh despite beginnign with `ssh-`");
-            match pubkey {
-                Ok(pubkey) => match pubkey.key_data().ed25519() {
-                    Some(ed25519) => match VerifyingKey::from_bytes(&ed25519.0) {
-                        Ok(vk) => {
-                            log::info!("successfully parsed '{}' as an OpenSSH Public Key", &fname);
-                            vk
-                        }
-                        Err(e) => {
-                            let e = anyhow::Error::from(e).context(
-                                    "Supplied verifying key was almost a valid ed25519 ssh key but failed to parse out a public key"
-                                );
-                            results.failed_key_parses.push((fname, e));
-
-                            continue;
-                        }
-                    },
-                    None => {
-                        results
-                            .failed_key_parses
-                            .push((fname, anyhow::anyhow!("key was not an ed25519 public key")));
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    results.failed_key_parses.push((fname, e));
-                    continue;
-                }
+        let vk = match keys::load_ed25519_public_key(&fbytes).context("failed to parse public key")
+        {
+            Ok(vk) => vk,
+            Err(e) => {
+                results.failed_key_parses.push((fname, e));
+                continue;
             }
-        } else if fbytes.starts_with(signatures::OPENSSL_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::info!("Key at '{}' is non-openssh public key", &fname);
-            match ed25519_dalek::VerifyingKey::from_public_key_pem(&String::from_utf8_lossy(
-                &fbytes,
-            )) {
-                Ok(vk) => {
-                    log::info!("successfully parsed '{}' as an OpenSSL Public Key", &fname);
-                    vk
-                }
-                Err(e) => {
-                    results.failed_key_parses.push((
-                        fname,
-                        anyhow::Error::from(e).context(
-                            "tried to create a Public Key but failed to parse as non-ssh format",
-                        ),
-                    ));
-
-                    continue;
-                }
-            }
-        } else {
-            let e = anyhow::anyhow!("Supplied verifying key was not a valid supported format");
-            results.failed_key_parses.push((fname, e));
-
-            continue;
         };
 
         /* Strip .pub from the name, to match the key to the domain */

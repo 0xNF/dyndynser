@@ -1,6 +1,7 @@
 mod client;
 mod config;
 mod ddns;
+mod keys;
 mod server;
 mod signatures;
 

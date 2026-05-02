@@ -1,7 +1,7 @@
 use anyhow::Context;
 use ed25519_dalek::pkcs8::DecodePrivateKey;
 
-use crate::signatures;
+use crate::{keys, signatures};
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -54,54 +54,8 @@ impl ConfigClient {
         }
 
         /* Find and load the keyfile bytes */
-        let key_str = std::fs::read_to_string(key_path).context("Invalid key_path")?;
-
-        let key_str = key_str.trim();
-
-        let signing_key: ed25519_dalek::SigningKey = if key_str
-            .starts_with(signatures::OPENSSH_PREFIX_PRIVATE_KEY)
-        {
-            log::info!("Signing key is an OpenSSH Key");
-            let mut sshkey = ssh_key::PrivateKey::from_openssh(key_str)?;
-            match (sshkey.is_encrypted(), signing_key_password) {
-                (true, None) => {
-                    log::info!(
-                        "key is encrypted, and no password was supplied. Trying a blank decryption"
-                    );
-                    /* try a blank decryption attempt */
-                    const ZERO_BYTE: [u8; 0] = [];
-                    sshkey = sshkey.decrypt(ZERO_BYTE).context("Key is encrypted, and no password was supplied. Tried an empty decryption attempt, but a password is required")?;
-                }
-                (true, Some(pw_str)) => {
-                    log::info!("key is encrypted, and a password was supplied. trying decryption");
-                    let pw_bytes = pw_str.as_bytes();
-                    sshkey = sshkey
-                        .decrypt(pw_bytes)
-                        .context("Key is encrypted, but supplied password did not match")?;
-                }
-                _ => {
-                    log::info!("Key is not encrypted");
-                }
-            }
-            let bytes = sshkey
-                .key_data()
-                .ed25519()
-                .ok_or(anyhow::anyhow!(
-                    "signing key was not ed25519, we only support ed25519 keys"
-                ))?
-                .private
-                .to_bytes();
-
-            ed25519_dalek::SigningKey::from_bytes(&bytes)
-        } else if key_str.starts_with(signatures::OPENSSL_PREFIX_PRIVATE_KEY) {
-            log::info!("Key was non-openssh signing key");
-            ed25519_dalek::SigningKey::from_pkcs8_pem(key_str)
-                .context("failed to decode pkcs8 pem bytes from signing key")?
-        } else {
-            Err(anyhow::anyhow!(
-                "Supplied signing key was not a valid supported format"
-            ))?
-        };
+        let key_bytes = std::fs::read(key_path).context("invalid key_path")?;
+        let signing_key = keys::load_ed25519_private_key(&key_bytes, signing_key_password)?;
 
         Ok(ConfigClient {
             is_dry_run,
@@ -180,5 +134,100 @@ impl ConfigServer {
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ed25519_dalek::pkcs8::DecodePrivateKey;
+    use x509_cert::{
+        der::{
+            DecodePem,
+            asn1::{PrintableStringRef, Utf8StringRef},
+            oid::db::rfc4519::COMMON_NAME,
+        },
+        *,
+    };
+
+    #[test]
+    fn test_load_private_ed25519_openssl_key() {
+        const KEY: &str = "-----BEGIN PRIVATE KEY-----
+lol/fixme
+-----END PRIVATE KEY-----";
+        let signing_key = ed25519_dalek::SigningKey::from_pkcs8_pem(KEY);
+        assert!(signing_key.is_ok(), "should have gotten a signing key");
+        println!("{:?}", signing_key);
+    }
+
+    #[test]
+    fn t2() {
+        const CERT: &str = "-----BEGIN CERTIFICATE-----
+MIICozCCAgWgAwIBAgIId7SmsKcLikwwCgYIKoZIzj0EAwMwgcIxCzAJBgNVBAYT
+AkpQMQ4wDAYDVQQIEwVUb2t5bzEQMA4GA1UEBxMHU2hpYnV5YTEcMBoGA1UEChMT
+QXN0ZXJpYSBDb3Jwb3JhdGlvbjEYMBYGA1UECxMPR3JhdmlvIFJvYm90aWNzMS0w
+KwYDVQQDEyRHcmF2aW8gUm9ib3RpY3MgRzEgU3ViLUNBIGdyYXZpby5jb20xKjAo
+BgkqhkiG9w0BCQEWG3NlY3VyaXR5QGdyYXZpb3JvYm90aWNzLmNvbTAeFw0yNjA1
+MDIwODUxMDBaFw00MTA1MDIwODUxMDBaMIG6MQswCQYDVQQGEwJKUDEOMAwGA1UE
+CBMFVG9reW8xEDAOBgNVBAcTB1NoaWJ1eWExGDAWBgNVBAoTD0dyYXZpbyBSb2Jv
+dGljczEdMBsGA1UECxMUSW5mb3JtYXRpb24gU2VjdXJpdHkxJDAiBgNVBAMTGzAz
+OTY0Njk2LmdyYXZpb3JvYm90aWNzLmNvbTEqMCgGCSqGSIb3DQEJARYbc2VjdXJp
+dHlAZ3Jhdmlvcm9ib3RpY3MuY29tMCowBQYDK2VwAyEALh18LjZhLYgHl8I8V8z+
+cwcEhvqy/A79LKxC5yFoa6GjGjAYMAkGA1UdEwQCMAAwCwYDVR0PBAQDAgeAMAoG
+CCqGSM49BAMDA4GLADCBhwJCAXWwBKrHGz+4mmHLPViBe5TcLNmY5JN7FOBJBOjN
+zTalVEXAolmjpr45heEWSBnuhhhPahk/59wapIsmUtMbdFhEAkF8PfX3npAz7pmG
+ehwiEszuAfzsI5kAn6xnfy67Oqm7Y++F4/Ga+2ZviYFaDlmAR2IUqw4jcU8uyc3b
+eMuhW+wTWQ==
+-----END CERTIFICATE-----
+";
+
+        use ed25519_dalek::VerifyingKey;
+
+        let cert = Certificate::from_pem(CERT.trim());
+        assert!(cert.is_ok(), "expected pem encoded x509 cert to load");
+        let cert = cert.unwrap();
+
+        // Extract verifying key from the cert's SPKI, not from the signing key
+        let spki = &cert.tbs_certificate.subject_public_key_info;
+
+        let pki = spki.subject_public_key.as_bytes();
+        assert!(pki.is_some(), "expected public bytes to be extractable");
+
+        let pki = pki.unwrap();
+        let pub_key_bytes: [u8; 32] = pki.try_into().unwrap();
+
+        let verifying_key = VerifyingKey::from_bytes(&pub_key_bytes);
+        assert!(
+            verifying_key.is_ok(),
+            "expected verifying key to be parsed out of public key bytes"
+        );
+        let verifying_key = verifying_key.unwrap();
+
+        let cn_atv = cert
+            .tbs_certificate
+            .subject
+            .0
+            .iter()
+            .flat_map(|rdn| rdn.0.iter())
+            .find(|atv| atv.oid == COMMON_NAME);
+
+        assert!(cn_atv.is_some(), "expected CommonName ATV to be unwrapped");
+        let cn_atv = cn_atv.unwrap();
+
+        let common_name = cn_atv
+            .value
+            .decode_as::<Utf8StringRef<'_>>()
+            .map(|s| s.as_str().to_owned())
+            .or_else(|_| {
+                cn_atv
+                    .value
+                    .decode_as::<PrintableStringRef<'_>>()
+                    .map(|s| s.as_str().to_owned())
+            });
+
+        assert!(common_name.is_ok(), "expected CommonName to exist");
+
+        let common_name = common_name.unwrap();
+
+        assert_eq!("03964696.graviorobotics.com", common_name);
     }
 }
