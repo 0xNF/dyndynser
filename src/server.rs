@@ -56,14 +56,17 @@ fn get_public_key_map(
         let fbytes = fbytes.unwrap();
 
         let vk = if fbytes.starts_with(signatures::OPENSSH_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::info!("key is an OpenSSH public key, will parse as such");
+            log::info!(
+                "key at {} is an OpenSSH public key, will parse as such",
+                &fname
+            );
             let pubkey = ssh_key::PublicKey::from_openssh(&String::from_utf8_lossy(&fbytes))
                 .context("failed to parse key as openssh despite beginnign with `ssh-`");
             match pubkey {
                 Ok(pubkey) => match pubkey.key_data().ed25519() {
                     Some(ed25519) => match VerifyingKey::from_bytes(&ed25519.0) {
                         Ok(vk) => {
-                            log::info!("successfully parsed as an OpenSSH Public Key");
+                            log::info!("successfully parsed '{}' as an OpenSSH Public Key", &fname);
                             vk
                         }
                         Err(e) => {
@@ -88,12 +91,12 @@ fn get_public_key_map(
                 }
             }
         } else if fbytes.starts_with(signatures::OPENSSL_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::info!("Key is non-openssh public key");
+            log::info!("Key at '{}' is non-openssh public key", &fname);
             match ed25519_dalek::VerifyingKey::from_public_key_pem(&String::from_utf8_lossy(
                 &fbytes,
             )) {
                 Ok(vk) => {
-                    log::info!("successfully parsed as an OpenSSL Public Key");
+                    log::info!("successfully parsed '{}' as an OpenSSL Public Key", &fname);
                     vk
                 }
                 Err(e) => {
@@ -180,13 +183,22 @@ pub fn handle_server(
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
     for signed_json in results.signed_jsons.into_iter() {
+        log::info!(
+            "Checking signature of {} ddns request",
+            &signed_json.payload.domain
+        );
         match check_valid_ddns_request(&signed_json, &domain_key_map)
             .context("failed to check signing key request")
         {
             Ok(_) => {
+                log::info!("Validatd '{}' domain requst", &signed_json.payload.domain);
                 results.valid_json.push(signed_json.payload);
             }
             Err(e) => {
+                log::error!(
+                    "Could not validate '{}' requst",
+                    &signed_json.payload.domain
+                );
                 results.failed_signature_checks.push((
                     signed_json.payload.domain,
                     anyhow::Error::from(e).context("signature did not pass validation"),
