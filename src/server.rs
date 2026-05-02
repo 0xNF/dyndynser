@@ -233,7 +233,7 @@ pub fn handle_server(
             println!("*\t{}: {:#?}", fail.0, fail.1);
         }
     }
-    if !results.failed_signature_checks {
+    if !results.failed_signature_checks.is_empty() {
         println!("Failed Signature Checks");
         for fail in results.failed_signature_checks {
             println!("*\t{}: {:#?}", fail.0, fail.1);
