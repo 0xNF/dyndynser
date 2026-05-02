@@ -187,12 +187,15 @@ pub fn handle_server(
         return Ok(());
     }
     println!("Found {} .ddns.json files", results.unverified_jsons.len());
+    results.unverified_jsons.iter().for_each(|unverified| {
+        println!("\t * {}", &unverified.payload.domain);
+    });
 
     /* Get Keys */
     let domain_key_map =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
-    log::debug!("key map: {:?}", &domain_key_map);
+    log::debug!("known domain keys: {:?}", &domain_key_map.keys());
 
     /* Check Keys exist */
     if domain_key_map.is_empty() {
