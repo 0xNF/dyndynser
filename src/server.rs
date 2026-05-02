@@ -162,6 +162,7 @@ fn check_valid_ddns_request(
 
 pub fn handle_server(
     is_dry_run: bool,
+    is_s3_delete_after_success: bool,
     s3_bucket: &str,
     s3_ddns_json_dir: &str,
     ddns_file_path: &str,
@@ -170,6 +171,7 @@ pub fn handle_server(
 ) -> Result<(), anyhow::Error> {
     let conf = ConfigServer::parse(
         is_dry_run,
+        is_s3_delete_after_success,
         s3_bucket,
         s3_ddns_json_dir,
         ddns_file_path,
@@ -219,7 +221,7 @@ pub fn handle_server(
             .context("failed to check signing key request")
         {
             Ok(_) => {
-                log::info!("Validated '{}' domain requst", &signed_json.payload.domain);
+                log::info!("Validated '{}' domain request", &signed_json.payload.domain);
                 results.verified_jsons.push(signed_json.payload);
             }
             Err(e) => {
@@ -243,6 +245,11 @@ pub fn handle_server(
         .context("ddns_file_path existed but could not be parsed into a YAML structure")?;
 
     for valid_request in results.verified_jsons {
+        log::debug!(
+            "processing validated request for '{}'",
+            &valid_request.domain
+        );
+
         let domain_with_trailing_dot = if valid_request.domain.ends_with('.') {
             valid_request.domain
         } else {
@@ -267,8 +274,8 @@ pub fn handle_server(
             .iter()
             .position(|p| p.name == new_ddns_record.name)
         {
-            Some(index) => route53_config.route_53.records_set[index] = new_ddns_record, // replace
-            None => route53_config.route_53.records_set.push(new_ddns_record),           // insert
+            Some(index) => route53_config.route_53.records_set[index] = new_ddns_record,
+            None => route53_config.route_53.records_set.push(new_ddns_record),
         }
     }
 

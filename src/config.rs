@@ -131,11 +131,18 @@ pub struct ConfigServer {
 
     // whether this run should make mutating changes or not
     pub is_dry_run: bool,
+
+    // if true, s3 ddns.json files used to construct a new route53-ddns.json object will be deleted from the s3 bucket
+    //
+    // objects that resulted in an will remain in-place
+    pub is_s3_delete_after_success: bool,
 }
 
 impl ConfigServer {
     pub fn parse(
         is_dry_run: bool,
+        is_s3_delete_after_success: bool,
+
         robocerts_bucket: &str,
         ddns_json_dir: &str,
 
@@ -164,6 +171,7 @@ impl ConfigServer {
 
         Ok(ConfigServer {
             is_dry_run,
+            is_s3_delete_after_success,
             ddns_file_path: ddns_file_path.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
             s3_robocerts_bucket: robocerts_bucket.to_owned(),
