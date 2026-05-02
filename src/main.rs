@@ -16,7 +16,7 @@ pub struct CLI {
 #[derive(Subcommand)]
 pub enum SubCommands {
     Server {
-        #[arg(long)]
+        #[arg(long = "dry-run")]
         is_dry_run: bool,
 
         s3_bucket: String,
@@ -28,7 +28,7 @@ pub enum SubCommands {
         aws_region: String,
     },
     Client {
-        #[arg(long)]
+        #[arg(long = "dry-run")]
         is_dry_run: bool,
 
         s3_bucket: String,

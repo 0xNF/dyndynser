@@ -170,6 +170,11 @@ pub fn handle_server(
     let mut results = fetch_ddns_jsons_from_s3(&conf)
         .context("failed to perform S3 read portion of server operation")?;
 
+    if results.signed_jsons.is_empty() {
+        println!("No ddns.json files found, nothing to do.");
+        return Ok(());
+    }
+
     let domain_key_map =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
