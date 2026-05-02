@@ -141,10 +141,12 @@ fn check_valid_ddns_request(
     );
     let vk = domain_key_map
         .get(&signed_json.payload.domain)
-        .ok_or(Err(anyhow::anyhow!(
-            "Receivd ddns request for domain '{}', but no matching key could be found",
-            &signed_json.payload.domain,
-        ))?)?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Received ddns request for domain '{}', but no matching key could be found",
+                &signed_json.payload.domain,
+            )
+        })?;
 
     /* if key is found, try to validate the signature */
     vk.verify_strict(
