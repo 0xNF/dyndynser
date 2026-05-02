@@ -8,7 +8,7 @@ use ed25519_dalek::{
 
 use crate::{
     config::*,
-    ddns::{self, DdnsJSON},
+    ddns::{self, DDNSRoute53Config, DdnsJSON, DdnsRoute53Record},
     signatures::{self, SignedJSON},
 };
 
@@ -117,7 +117,9 @@ fn get_public_key_map(
             continue;
         };
 
-        hm.insert(fname, vk);
+        /* Strip .pub from the name, to match the key to the domain */
+        let certname = fname.strip_suffix(".pub").context("failed to strio .pub from key, this is an asserttion failure and the developer should be contacted")?;
+        hm.insert(certname.to_owned(), vk);
     }
 
     Ok(hm)
@@ -174,16 +176,16 @@ pub fn handle_server(
     let mut results = fetch_ddns_jsons_from_s3(&conf)
         .context("failed to perform S3 read portion of server operation")?;
 
-    if results.signed_jsons.is_empty() {
+    if results.unverified_jsons.is_empty() {
         println!("No ddns.json files found, nothing to do.");
         return Ok(());
     }
-    println!("Found {} .ddns.json files", results.signed_jsons.len());
+    println!("Found {} .ddns.json files", results.unverified_jsons.len());
 
     let domain_key_map =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
-    for signed_json in results.signed_jsons.into_iter() {
+    for signed_json in results.unverified_jsons.into_iter() {
         log::info!(
             "Checking signature of {} ddns request",
             &signed_json.payload.domain
@@ -193,12 +195,13 @@ pub fn handle_server(
         {
             Ok(_) => {
                 log::info!("Validated '{}' domain requst", &signed_json.payload.domain);
-                results.valid_json.push(signed_json.payload);
+                results.verified_jsons.push(signed_json.payload);
             }
             Err(e) => {
                 log::error!(
-                    "Could not validate '{}' request",
-                    &signed_json.payload.domain
+                    "Could not validate '{}' request: {}",
+                    &signed_json.payload.domain,
+                    e,
                 );
                 results.failed_signature_checks.push((
                     signed_json.payload.domain,
@@ -209,36 +212,46 @@ pub fn handle_server(
     }
 
     /* read the ddns-route53 config file */
+    let contents = std::fs::read_to_string(conf.ddns_file_path)
+        .context("failed to read ddns_route53 ddns config file")?;
+    let mut route53_config: DDNSRoute53Config = serde_yaml::from_str(&contents)
+        .context("ddns_file_path existed but could not be parsed into a YAML structure")?;
+
+    for valid_request in results.verified_jsons {
+        let new_ddns_record = DdnsRoute53Record {
+            name: valid_request.domain,
+            record_type: if valid_request.ip.is_ipv4() {
+                String::from("A")
+            } else {
+                String::from("AAAA")
+            },
+            time_to_live: Some(300),
+        };
+
+        match route53_config
+            .route_53
+            .records_set
+            .iter()
+            .position(|p| p.name == new_ddns_record.name)
+        {
+            Some(index) => route53_config.route_53.records_set[index] = new_ddns_record, // replace
+            None => route53_config.route_53.records_set.push(new_ddns_record),           // insert
+        }
+    }
+
+    let yaml_str = serde_yaml::to_string(&route53_config)
+        .context("failed to serialize route53 config back into yaml bytes")?;
+
+    if conf.is_dry_run {
+        println!("Will write this yaml:\n{}", yaml_str);
+        return Ok(());
+    }
 
     /* Write the valid requests to it, and write file back to disk */
 
     /* trigger a ddns request automatically via a Process Command */
 
-    println!("Summary\n-------\n");
-    if !results.failed_s3_fetches.is_empty() {
-        println!("Failed S3 Fetches:");
-        for fail in results.failed_s3_fetches {
-            println!("*\t{}: {:#?}", fail.0, fail.1);
-        }
-    }
-    if results.failed_json_deserdes.is_empty() {
-        println!("Failed JSON Deserializations:");
-        for fail in results.failed_json_deserdes {
-            println!("*\t{}: {:#?}", fail.0, fail.1);
-        }
-    }
-    if !results.failed_key_parses.is_empty() {
-        println!("Failed Signing Key Parses");
-        for fail in results.failed_key_parses {
-            println!("*\t{}: {:#?}", fail.0, fail.1);
-        }
-    }
-    if !results.failed_signature_checks.is_empty() {
-        println!("Failed Signature Checks");
-        for fail in results.failed_signature_checks {
-            println!("*\t{}: {:#?}", fail.0, fail.1);
-        }
-    }
+    // &results.print_summary();
 
     Ok(())
 }
@@ -308,13 +321,14 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
                                 &x.key,
                                 ddns::DDNS_JSON_FILE_EXT
                             );
-                            results.signed_jsons.push(ddnsjson);
+                            results.unverified_jsons.push(ddnsjson);
                         }
                         Err(e) => {
                             log::error!(
-                                "failed to deserde key '{}' into a {} object",
+                                "failed to deserde key '{}' into a {} object: {}",
                                 &x.key,
-                                ddns::DDNS_JSON_FILE_EXT
+                                ddns::DDNS_JSON_FILE_EXT,
+                                e,
                             );
                             results.failed_json_deserdes.push((
                                 x.key.to_owned(),
@@ -351,18 +365,46 @@ struct Results {
     failed_json_deserdes: Vec<(String, anyhow::Error)>,
     failed_signature_checks: Vec<(String, anyhow::Error)>,
     failed_key_parses: Vec<(String, anyhow::Error)>,
-    signed_jsons: Vec<SignedJSON<DdnsJSON>>,
-    valid_json: Vec<DdnsJSON>,
+    unverified_jsons: Vec<SignedJSON<DdnsJSON>>,
+    verified_jsons: Vec<DdnsJSON>,
 }
 impl Results {
     fn new() -> Self {
         Self {
-            signed_jsons: Vec::new(),
-            valid_json: Vec::new(),
+            unverified_jsons: Vec::new(),
+            verified_jsons: Vec::new(),
             failed_s3_fetches: Vec::new(),
             failed_json_deserdes: Vec::new(),
             failed_signature_checks: Vec::new(),
             failed_key_parses: Vec::new(),
+        }
+    }
+
+    fn print_summary(&self) {
+        println!("Summary\n-------");
+        if !self.failed_s3_fetches.is_empty() {
+            println!("Failed S3 Fetches:");
+            for fail in &self.failed_s3_fetches {
+                println!("\t *{}: {:#?}", fail.0, fail.1);
+            }
+        }
+        if !self.failed_json_deserdes.is_empty() {
+            println!("Failed JSON Deserializations:");
+            for fail in &self.failed_json_deserdes {
+                println!("\t *{}: {:#?}", fail.0, fail.1);
+            }
+        }
+        if !self.failed_key_parses.is_empty() {
+            println!("Failed Signing Key Parses:");
+            for fail in &self.failed_key_parses {
+                println!("\t *{}: {:#?}", fail.0, fail.1);
+            }
+        }
+        if !self.failed_signature_checks.is_empty() {
+            println!("Failed Signature Checks:");
+            for fail in &self.failed_signature_checks {
+                println!("\t *{}: {:#?}", fail.0, fail.1);
+            }
         }
     }
 }
