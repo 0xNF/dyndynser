@@ -242,7 +242,11 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
             )
             .context("failed to list contents of s3 bucket")?;
 
-        log::debug!("Successfully fetched s3 page {}", iterationcount);
+        log::debug!(
+            "Successfully fetched s3 page #{} ({} items)",
+            iterationcount,
+            &list_result.contents.len()
+        );
 
         for x in &list_result.contents {
             /* Check key is an expected .ddns.json request file */
