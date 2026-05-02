@@ -6,8 +6,10 @@ pub struct DdnsJSON {
     pub ip: std::net::IpAddr,
 }
 
+pub const DDNS_JSON_FILE_EXT: &str = ".ddns.json";
+
 impl DdnsJSON {
     pub fn make_filename(&self) -> String {
-        format!("{}.ddns.json", &self.domain)
+        format!("{}{}", &self.domain, DDNS_JSON_FILE_EXT)
     }
 }

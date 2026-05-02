@@ -5,7 +5,6 @@ mod server;
 mod signatures;
 
 use clap::{Parser, Subcommand};
-use serde::{Deserialize, Serialize};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -17,22 +16,31 @@ pub struct CLI {
 #[derive(Subcommand)]
 pub enum SubCommands {
     Server {
-        s3_robocerts_bucket: String,
+        #[arg(long)]
+        is_dry_run: bool,
+
+        s3_bucket: String,
         ddns_file_path: String,
         s3_ddns_json_dir: String,
         keys_search_path: String,
-        region: String,
+
+        #[arg(name = "region")]
+        aws_region: String,
     },
     Client {
-        robocerts_bucket: String,
+        #[arg(long)]
+        is_dry_run: bool,
+
+        s3_bucket: String,
         s3_ddns_json_dir: String,
         domain: String,
         key_path: String,
+
         #[arg(long)]
         signing_key_password: Option<String>,
-        region: String,
-        #[arg(long)]
-        dry_run: bool,
+
+        #[arg(name = "region")]
+        aws_region: String,
     },
 }
 
@@ -42,12 +50,14 @@ fn main() -> anyhow::Result<()> {
     let cli = CLI::parse();
     match cli.command {
         SubCommands::Server {
-            s3_robocerts_bucket,
+            is_dry_run,
+            s3_bucket: s3_robocerts_bucket,
             s3_ddns_json_dir,
             ddns_file_path,
             keys_search_path,
-            region,
+            aws_region: region,
         } => server::handle_server(
+            is_dry_run,
             &s3_robocerts_bucket,
             &s3_ddns_json_dir,
             &ddns_file_path,
@@ -55,16 +65,16 @@ fn main() -> anyhow::Result<()> {
             &region,
         ),
         SubCommands::Client {
-            robocerts_bucket,
+            is_dry_run,
+            s3_bucket,
             s3_ddns_json_dir,
             domain,
             key_path,
             signing_key_password,
-            region,
-            dry_run,
+            aws_region: region,
         } => client::handle_client(
-            dry_run,
-            &robocerts_bucket,
+            is_dry_run,
+            &s3_bucket,
             &s3_ddns_json_dir,
             &domain,
             &key_path,

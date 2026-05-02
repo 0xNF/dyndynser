@@ -1,6 +1,8 @@
 use anyhow::Context;
 use ed25519_dalek::pkcs8::DecodePrivateKey;
 
+use crate::signatures;
+
 #[derive(Debug)]
 pub struct ConfigClient {
     // S3 Bucket id to push $domain.json files
@@ -17,10 +19,14 @@ pub struct ConfigClient {
 
     // private key file to sign .json files with
     pub signing_key: ed25519_dalek::SigningKey,
+
+    // whether this run should make mutating changes or not
+    pub is_dry_run: bool,
 }
 
 impl ConfigClient {
     pub fn parse(
+        is_dry_run: bool,
         robocerts_bucket: &str,
         ddns_json_dir: &str,
         domain: &str,
@@ -51,7 +57,7 @@ impl ConfigClient {
         let key_str = std::fs::read_to_string(key_path).context("Invalid key_path")?;
 
         let signing_key: ed25519_dalek::SigningKey = if key_str
-            .starts_with("-----BEGIN OPENSSH PRIVATE KEY-----")
+            .starts_with(signatures::OPENSSH_PREFIX_PRIVATE_KEY)
         {
             log::info!("Signing key is an OpenSSH Key");
             let mut sshkey = ssh_key::PrivateKey::from_openssh(&key_str)?;
@@ -85,7 +91,7 @@ impl ConfigClient {
                 .to_bytes();
 
             ed25519_dalek::SigningKey::from_bytes(&bytes)
-        } else if key_str.starts_with("-----BEGIN PRIVATE KEY-----") {
+        } else if key_str.starts_with(signatures::OPENSSL_PREFIX_PRIVATE_KEY) {
             log::info!("Key was non-openssh signing key");
             ed25519_dalek::SigningKey::from_pkcs8_pem(&key_str)
                 .context("failed to decode pkcs8 pem bytes from signing key")?
@@ -96,6 +102,7 @@ impl ConfigClient {
         };
 
         Ok(ConfigClient {
+            is_dry_run,
             domain: domain.to_lowercase(),
             signing_key,
             s3_robocerts_bucket: robocerts_bucket.to_owned(),
@@ -117,14 +124,18 @@ pub struct ConfigServer {
     pub s3_robocerts_bucket: String,
 
     // Path on the S3 bucket to search for -ddns.json files
-    pub s3_robocerts_ddns_json_directory: String,
+    pub s3_bucket_ddns_json_directory: String,
 
     // AWS Region, like us-east-1
     pub region: String,
+
+    // whether this run should make mutating changes or not
+    pub is_dry_run: bool,
 }
 
 impl ConfigServer {
     pub fn parse(
+        is_dry_run: bool,
         robocerts_bucket: &str,
         ddns_json_dir: &str,
 
@@ -152,17 +163,12 @@ impl ConfigServer {
         }
 
         Ok(ConfigServer {
+            is_dry_run,
             ddns_file_path: ddns_file_path.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
             s3_robocerts_bucket: robocerts_bucket.to_owned(),
-            s3_robocerts_ddns_json_directory: ddns_json_dir.to_owned(),
+            s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
     }
-}
-
-#[derive(Debug)]
-pub enum Config {
-    Client(ConfigClient),
-    Server(ConfigServer),
 }

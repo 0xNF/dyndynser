@@ -9,8 +9,9 @@ use crate::config::ConfigClient;
 use crate::ddns;
 use crate::signatures;
 
+// In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
 pub fn handle_client(
-    dry_run: bool,
+    is_dry_run: bool,
     s3_robocerts_bucket: &str,
     s3_ddns_json_dir: &str,
     domain: &str,
@@ -20,28 +21,31 @@ pub fn handle_client(
 ) -> Result<(), anyhow::Error> {
     log::info!("parsing Client Config");
     let conf = ConfigClient::parse(
+        is_dry_run,
         s3_robocerts_bucket,
         s3_ddns_json_dir,
         domain,
         key_path,
         signing_key_password,
         region,
-    )?;
+    )
+    .context("failed to parse Client config")?;
 
-    if dry_run {
+    if conf.is_dry_run {
         log::info!("Doing a dry run, will not make any mutating changes or API calls");
     }
+
     /* Get IP */
     log::info!("Querying for machine's IP addr");
     let ip = query_for_ip().context("failed to get IP address of this machine")?;
 
-    /* Create DDNS struct json */
+    /* Create and sign the DDNS struct json */
     let ddns_obj = ddns::DdnsJSON {
         domain: conf.domain,
         ip: ip,
     };
 
-    let file_bytes =
+    let signed_json_bytes =
         sign_object(&conf.signing_key, &ddns_obj).context("Failed to sign payload object")?;
 
     /* Send to S3 */
@@ -52,25 +56,24 @@ pub fn handle_client(
         ddns_obj.make_filename()
     );
 
-    let region = conf
-        .region
-        .parse()
-        .context("invalid AWS region found during S3 write")?;
-    let content = file_bytes;
-
-    if dry_run {
+    if conf.is_dry_run {
         println!(
             "Will write to: s3://{}{}\nJSON:\n{}",
             s3_robocerts_bucket,
             ddns_json_path,
-            String::from_utf8_lossy(&content)
+            String::from_utf8_lossy(&signed_json_bytes)
         );
     } else {
-        let credentials = s3::creds::Credentials::default()?;
+        let region = conf
+            .region
+            .parse()
+            .context("invalid AWS region found during S3 write")?;
+        let credentials =
+            s3::creds::Credentials::default().context("failed to retrieve s3 credentials")?;
         let bucket = s3::Bucket::new(&conf.s3_robocerts_bucket, region, credentials)?;
 
         let written_path = bucket
-            .put_object_with_content_type(ddns_json_path, &content, "application/json")
+            .put_object_with_content_type(ddns_json_path, &signed_json_bytes, "application/json")
             .context("failed to put S3 object")?;
         if written_path.status_code() != 200 {
             Err(anyhow::anyhow!("s3 returned non-200"))?;

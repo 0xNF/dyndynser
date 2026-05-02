@@ -4,6 +4,13 @@ use serde::{
 };
 use std::fmt;
 
+pub const PUBLIC_KEY_EXT: &str = "pub";
+pub const PRIVATE_KEY_EXT: &str = "priv";
+pub const OPENSSL_PREFIX_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----";
+pub const OPENSSL_PREFIX_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----";
+pub const OPENSSH_PREFIX_PRIVATE_KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----";
+pub const OPENSSH_PREFIX_PUBLIC_KEY: &str = "ssh-";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Signature(ed25519_dalek::Signature);
 impl Signature {
