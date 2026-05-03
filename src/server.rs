@@ -393,6 +393,10 @@ impl<'ltself> RunResults<'ltself> {
                 println!("\t *{}: {:#?}", fail.0, fail.1);
             }
         }
+        println!("dns records adjusted:");
+        for verified in self.verified_jsons.iter() {
+            println!("\t * {} -> {}", &verified.domain, &verified.ip)
+        }
     }
 }
 
