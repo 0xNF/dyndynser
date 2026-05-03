@@ -26,3 +26,11 @@ serde_json = "1.0.149"
 serde_yaml = "0.9.34"
 ssh-key = { version = "0.6.7", features = ["ed25519", "encryption"] }
 x509-cert = { version = "0.2.5", features = ["pem"] }
+
+
+[profile.release]
+strip = true      # Automatically strip symbols from the binary.
+opt-level = "z"   # Optimize for size.
+lto = true
+codegen-units = 1
+panic = "abort"
