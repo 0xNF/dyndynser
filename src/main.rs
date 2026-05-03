@@ -8,7 +8,11 @@ mod signatures;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(
+    version,
+    about = "S3-backed dynamic DNS service with cryptographic record signing",
+    long_about = None
+)]
 pub struct CLI {
     #[command(subcommand)]
     command: SubCommands,
@@ -16,41 +20,99 @@ pub struct CLI {
 
 #[derive(Subcommand)]
 pub enum SubCommands {
+    /// Run in server mode, processing and validating DDNS update equests stored in S3.
+    /// The server verifies cryptographic signatures on each request against a set of trusted public keys before applying
+    /// any DNS record changes.
     Server {
-        #[arg(long = "dry-run")]
+        #[arg(
+            long = "dry-run",
+            help = "Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything ti Route53. Will print what would otherwise be updated."
+        )]
         is_dry_run: bool,
 
+        #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend")]
         s3_bucket: String,
+        #[arg(
+            long = "bucket-ddns-dir",
+            help = "S3 key prefix (directory) for pending DDNS update JSON files"
+        )]
         s3_ddns_json_dir: String,
 
+        #[arg(
+            long = "ddns-config-file",
+            help = "Path to the local ddns-route53.yaml configuration file"
+        )]
         ddns_file_path: String,
+
+        #[arg(
+            long = "keys-search-path",
+            help = "Directory to search for trusted public key files used in signature verification"
+        )]
         keys_search_path: String,
 
-        #[arg(name = "region")]
+        #[arg(
+            name = "aws-region",
+            help = "AWS region of the S3 bucket (e.g. eu-west-1)",
+            env = "DYNDYNSER__AWS_REGION"
+        )]
         aws_region: String,
     },
+
+    /// Run in client mode, publishing a signed DDNS update request to S3 for the server to process.
+    /// The update is cryptographically signed using the provided private key so the server can verify authenticity.
     Client {
-        #[arg(long = "dry-run")]
+        #[arg(
+            long = "dry-run",
+            help = "Simulate all operations without writing any DNS changes to S3. Will print what would otherwise be updated."
+        )]
         is_dry_run: bool,
 
+        #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend")]
         s3_bucket: String,
+
+        #[arg(
+            long = "bucket-ddns-dir",
+            help = "S3 key prefix (directory) for pending DDNS update JSON files"
+        )]
         s3_ddns_json_dir: String,
+
+        #[arg(
+            long = "domain",
+            help = "Fully-qualified domain name to update (e.g. home.example.com)"
+        )]
         domain: String,
-        #[arg(long)]
+
+        #[arg(
+            long,
+            help = "DNS record TTL in seconds (uses server default if omitted)"
+        )]
         ttl: Option<u32>,
+
+        #[arg(
+            long = "key-path",
+            help = "Path to the PEM-encoded Ed25519 private key file for signing"
+        )]
         key_path: String,
 
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Passphrase to decrypt the private key (omit if the key is not encrypted)",
+            env = "DYNDYNSER__SIGNING_KEY_PASSWORD"
+        )]
         signing_key_password: Option<String>,
 
-        #[arg(name = "region")]
+        #[arg(
+            name = "aws-region",
+            help = "AWS region of the S3 bucket (e.g. eu-west-1)",
+            env = "DYNDYNSER__AWS_REGION"
+        )]
         aws_region: String,
     },
 }
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
-    log::debug!("loading ddnser");
+    log::debug!("loading dyndynser");
     let cli = CLI::parse();
     match cli.command {
         SubCommands::Server {
