@@ -230,13 +230,16 @@ pub fn handle_server(
         return Ok(());
     }
 
-    results.print_summary();
-
+    log::debug!("Writing yaml ddns-route53 config file");
     /* Write the valid requests to it, and write file back to disk */
+    std::fs::write(&conf.ddns_file_path, yaml_str)
+        .context("failed to write new ddns-route53 yaml config")?;
+
+    log::info!("Successfully wrote ddns-route53 config yaml file");
 
     /* trigger a ddns request automatically via a Process Command */
 
-    // &results.print_summary();
+    results.print_summary();
 
     Ok(())
 }

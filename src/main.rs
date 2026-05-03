@@ -51,7 +51,7 @@ pub enum SubCommands {
         keys_search_path: String,
 
         #[arg(
-            name = "aws-region",
+            long = "aws-region",
             help = "AWS region of the S3 bucket (e.g. eu-west-1)",
             env = "DYNDYNSER__AWS_REGION"
         )]
@@ -102,7 +102,7 @@ pub enum SubCommands {
         signing_key_password: Option<String>,
 
         #[arg(
-            name = "aws-region",
+            long = "aws-region",
             help = "AWS region of the S3 bucket (e.g. eu-west-1)",
             env = "DYNDYNSER__AWS_REGION"
         )]

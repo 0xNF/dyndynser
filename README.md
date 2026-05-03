@@ -19,7 +19,7 @@ cargo build
 
 # Runtime / Environment Requirements
 
-## Both
+## Bothg
 * Running on an AWS EC2 instance
 
 ## Client
