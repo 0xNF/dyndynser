@@ -231,7 +231,7 @@ pub fn handle_server(
         .context("failed to write new ddns-route53 yaml config")?;
 
     log::info!("Successfully wrote ddns-route53 config yaml file");
-    println("Wrote ddns-route53 config file");
+    println!("Wrote ddns-route53 config file");
 
     /* trigger a ddns request automatically via a Process Command */
 
