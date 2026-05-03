@@ -19,8 +19,6 @@ pub enum SubCommands {
     Server {
         #[arg(long = "dry-run")]
         is_dry_run: bool,
-        #[arg(long = "s3-delete-after-success")]
-        is_s3_delete_after_success: bool,
 
         s3_bucket: String,
         s3_ddns_json_dir: String,
@@ -57,16 +55,14 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         SubCommands::Server {
             is_dry_run,
-            is_s3_delete_after_success,
-            s3_bucket: s3_robocerts_bucket,
+            s3_bucket,
             s3_ddns_json_dir,
             ddns_file_path,
             keys_search_path,
             aws_region: region,
         } => server::handle_server(
             is_dry_run,
-            is_s3_delete_after_success,
-            &s3_robocerts_bucket,
+            &s3_bucket,
             &s3_ddns_json_dir,
             &ddns_file_path,
             &keys_search_path,

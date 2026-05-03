@@ -99,7 +99,6 @@ fn check_valid_ddns_request(
 
 pub fn handle_server(
     is_dry_run: bool,
-    is_s3_delete_after_success: bool,
     s3_bucket: &str,
     s3_ddns_json_dir: &str,
     ddns_file_path: &str,
@@ -108,7 +107,6 @@ pub fn handle_server(
 ) -> Result<(), anyhow::Error> {
     let conf = ConfigServer::parse(
         is_dry_run,
-        is_s3_delete_after_success,
         s3_bucket,
         s3_ddns_json_dir,
         ddns_file_path,
