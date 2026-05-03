@@ -221,12 +221,7 @@ pub fn handle_server(
         .context("failed to serialize route53 config back into yaml bytes")?;
 
     if conf.is_dry_run {
-        println!("Will write this yaml:\n```yaml\n{}\n```", yaml_str);
-        println!();
-        println!(
-            "will delete the following s3 bucket items: {:?}",
-            results.unverified_jsons
-        );
+        println!("Will write this yaml:\n\n```yaml\n{}\n```", yaml_str);
         return Ok(());
     }
 
@@ -236,6 +231,7 @@ pub fn handle_server(
         .context("failed to write new ddns-route53 yaml config")?;
 
     log::info!("Successfully wrote ddns-route53 config yaml file");
+    println("Wrote ddns-route53 config file");
 
     /* trigger a ddns request automatically via a Process Command */
 
