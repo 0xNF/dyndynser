@@ -5,15 +5,20 @@ use serde_yaml::Value;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DdnsJSON {
+    // FQDN to set DNS records for
     pub domain: String,
+    // IP, 4 or 6, to point the record to
     pub ip: std::net::IpAddr,
+
+    // Optional duration to specify
+    pub ttl: Option<u32>,
 }
 
-pub const DDNS_JSON_FILE_EXT: &str = ".ddns.json";
-
 impl DdnsJSON {
+    pub const DDNS_JSON_FILE_EXT: &str = ".ddns.json";
+
     pub fn make_filename(&self) -> String {
-        format!("{}{}", &self.domain, DDNS_JSON_FILE_EXT)
+        format!("{}{}", &self.domain, DdnsJSON::DDNS_JSON_FILE_EXT)
     }
 }
 

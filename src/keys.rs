@@ -16,6 +16,7 @@ pub struct CertMatch {
     pub verifying_key: VerifyingKey,
 }
 
+// TODO: Figure out where to call this, if we should pass in an --x509 flag, etc
 pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyhow::Error> {
     let cert_bytes = cert_bytes.trim_ascii();
     let cert = Certificate::from_pem(&cert_bytes)

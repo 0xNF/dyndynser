@@ -38,6 +38,7 @@ pub enum SubCommands {
         s3_bucket: String,
         s3_ddns_json_dir: String,
         domain: String,
+        ttl: Option<u32>,
         key_path: String,
 
         #[arg(long)]
@@ -75,6 +76,7 @@ fn main() -> anyhow::Result<()> {
             s3_bucket,
             s3_ddns_json_dir,
             domain,
+            ttl,
             key_path,
             signing_key_password,
             aws_region: region,
@@ -83,6 +85,7 @@ fn main() -> anyhow::Result<()> {
             &s3_bucket,
             &s3_ddns_json_dir,
             &domain,
+            ttl,
             &key_path,
             signing_key_password.as_deref(),
             &region,

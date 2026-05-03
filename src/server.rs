@@ -1,10 +1,7 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::Context;
-use ed25519_dalek::{
-    VerifyingKey,
-    pkcs8::{DecodePrivateKey, DecodePublicKey},
-};
+use ed25519_dalek::VerifyingKey;
 
 use crate::{
     config::*,
@@ -15,7 +12,7 @@ use crate::{
 
 fn get_public_key_map(
     conf: &ConfigServer,
-    results: &mut Results,
+    results: &mut RunResults,
 ) -> Result<HashMap<String, ed25519_dalek::VerifyingKey>, anyhow::Error> {
     let mut hm: HashMap<String, ed25519_dalek::VerifyingKey> = HashMap::new();
 
@@ -45,20 +42,8 @@ fn get_public_key_map(
         let fname = entry.file_name().to_string_lossy().to_string();
         log::debug!("attempting to parse key found at {}", &fname);
 
-        let key_bytes =
+        let fbytes =
             keys::read_file_limited(entry.path(), 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
-
-        let fbytes = std::fs::read(entry.path())
-            .with_context(|| format!("failed to read key file: {}", entry.path().display()));
-
-        if let Err(e) = fbytes {
-            results.failed_key_parses.push((
-                fname,
-                anyhow::Error::from(e).context("failed to read bytes of key file"),
-            ));
-            continue;
-        }
-        let fbytes = fbytes.unwrap();
 
         let vk = match keys::load_ed25519_public_key(&fbytes).context("failed to parse public key")
         {
@@ -164,7 +149,7 @@ pub fn handle_server(
     }
 
     /* Validate each request by finding a corresponding Public Key */
-    for signed_json in results.unverified_jsons.into_iter() {
+    for signed_json in results.unverified_jsons.iter() {
         log::info!(
             "Checking signature of '{}' ddns request",
             &signed_json.payload.domain
@@ -174,7 +159,7 @@ pub fn handle_server(
         {
             Ok(_) => {
                 log::info!("Validated '{}' domain request", &signed_json.payload.domain);
-                results.verified_jsons.push(signed_json.payload);
+                results.verified_jsons.push(&signed_json.payload);
             }
             Err(e) => {
                 log::error!(
@@ -183,7 +168,7 @@ pub fn handle_server(
                     e,
                 );
                 results.failed_signature_checks.push((
-                    signed_json.payload.domain,
+                    &signed_json.payload.domain,
                     anyhow::Error::from(e).context("signature did not pass validation"),
                 ));
             }
@@ -191,25 +176,28 @@ pub fn handle_server(
     }
 
     /* read the ddns-route53 config file */
-    let contents = std::fs::read_to_string(conf.ddns_file_path)
+    let contents = std::fs::read_to_string(&conf.ddns_file_path)
         .context("failed to read ddns_route53 ddns config file")?;
     let mut route53_config: DDNSRoute53Config = serde_yaml::from_str(&contents)
         .context("ddns_file_path existed but could not be parsed into a YAML structure")?;
 
-    for valid_request in results.verified_jsons {
+    for valid_request in results.verified_jsons.iter() {
         log::debug!(
             "processing validated request for '{}'",
             &valid_request.domain
         );
 
-        let domain_with_trailing_dot = if valid_request.domain.ends_with('.') {
-            valid_request.domain
+        let with_traiing_dot = if valid_request.domain.ends_with('.') {
+            Cow::Borrowed(&valid_request.domain)
         } else {
             log::debug!("domain didn't end with '.', adding one ourselves");
-            format!("{}.", valid_request.domain)
+            let mut owned = valid_request.domain.to_owned();
+            owned.push('.');
+            Cow::Owned(owned)
         };
+
         let new_ddns_record = DdnsRoute53Record {
-            name: domain_with_trailing_dot,
+            name: with_traiing_dot.to_string(),
             record_type: if valid_request.ip.is_ipv4() {
                 String::from("A")
             } else if valid_request.ip.is_ipv6() {
@@ -244,6 +232,8 @@ pub fn handle_server(
         return Ok(());
     }
 
+    results.print_summary();
+
     /* Write the valid requests to it, and write file back to disk */
 
     /* trigger a ddns request automatically via a Process Command */
@@ -253,9 +243,11 @@ pub fn handle_server(
     Ok(())
 }
 
-fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Error> {
+fn fetch_ddns_jsons_from_s3<'unverified>(
+    conf: &'unverified ConfigServer,
+) -> Result<RunResults<'unverified>, anyhow::Error> {
     log::info!("Fetching s3 bucket items");
-    let mut results = Results::new();
+    let mut results = RunResults::new();
 
     /* S3 set up */
     let credentials = s3::creds::Credentials::default()?;
@@ -299,10 +291,10 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
 
         for x in &list_result.contents {
             /* Check key is an expected .ddns.json request file */
-            if !x.key.ends_with(ddns::DDNS_JSON_FILE_EXT) {
+            if !x.key.ends_with(ddns::DdnsJSON::DDNS_JSON_FILE_EXT) {
                 eprintln!(
                     "invalid s3 object key, not a ddns '{}' file: '{}'",
-                    ddns::DDNS_JSON_FILE_EXT,
+                    ddns::DdnsJSON::DDNS_JSON_FILE_EXT,
                     &x.key
                 );
                 continue;
@@ -316,7 +308,7 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
                             log::debug!(
                                 "successfully deserde'd key '{}' into a {} object",
                                 &x.key,
-                                ddns::DDNS_JSON_FILE_EXT
+                                ddns::DdnsJSON::DDNS_JSON_FILE_EXT
                             );
                             results.unverified_jsons.push(ddnsjson);
                         }
@@ -324,7 +316,7 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
                             log::error!(
                                 "failed to deserde key '{}' into a {} object: {}",
                                 &x.key,
-                                ddns::DDNS_JSON_FILE_EXT,
+                                ddns::DdnsJSON::DDNS_JSON_FILE_EXT,
                                 e,
                             );
                             results.failed_json_deserdes.push((
@@ -357,15 +349,16 @@ fn fetch_ddns_jsons_from_s3(conf: &ConfigServer) -> Result<Results, anyhow::Erro
     Ok(results)
 }
 
-struct Results {
+// Holds both accumulating non-blocking failures, as well as the Signature-Verified Ddns Json objects
+struct RunResults<'unverified> {
     failed_s3_fetches: Vec<(String, anyhow::Error)>,
     failed_json_deserdes: Vec<(String, anyhow::Error)>,
-    failed_signature_checks: Vec<(String, anyhow::Error)>,
+    failed_signature_checks: Vec<(&'unverified str, anyhow::Error)>, // references the unverifid_jsons list
     failed_key_parses: Vec<(String, anyhow::Error)>,
     unverified_jsons: Vec<SignedJSON<DdnsJSON>>,
-    verified_jsons: Vec<DdnsJSON>,
+    verified_jsons: Vec<&'unverified DdnsJSON>, // references the unverified_jsons list
 }
-impl Results {
+impl<'ltself> RunResults<'ltself> {
     fn new() -> Self {
         Self {
             unverified_jsons: Vec::new(),

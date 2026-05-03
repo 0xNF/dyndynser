@@ -15,6 +15,7 @@ pub fn handle_client(
     s3_robocerts_bucket: &str,
     s3_ddns_json_dir: &str,
     domain: &str,
+    ttl: Option<u32>,
     key_path: &str,
     signing_key_password: Option<&str>,
     region: &str,
@@ -25,6 +26,7 @@ pub fn handle_client(
         s3_robocerts_bucket,
         s3_ddns_json_dir,
         domain,
+        ttl,
         key_path,
         signing_key_password,
         region,
@@ -43,6 +45,7 @@ pub fn handle_client(
     let ddns_obj = ddns::DdnsJSON {
         domain: conf.domain,
         ip: ip,
+        ttl: conf.ttl.map(|d| d.as_secs() as u32),
     };
 
     let signed_json_bytes =

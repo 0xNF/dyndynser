@@ -1,6 +1,11 @@
+use std::time::Duration;
+
 use anyhow::Context;
 
 use crate::keys;
+
+// 5 minutes default ttl if not specified
+const DEFAULT_TTL: u32 = 300;
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -16,6 +21,9 @@ pub struct ConfigClient {
     // Domain that this client is configured to push for
     pub domain: String,
 
+    // TTL to mark the record valid for
+    pub ttl: Option<Duration>,
+
     // private key file to sign .json files with
     pub signing_key: ed25519_dalek::SigningKey,
 
@@ -29,6 +37,7 @@ impl ConfigClient {
         robocerts_bucket: &str,
         ddns_json_dir: &str,
         domain: &str,
+        ttl_seconds: Option<u32>,
         key_path: &str,
         signing_key_password: Option<&str>,
         region: &str,
@@ -38,6 +47,7 @@ impl ConfigClient {
         let key_path = key_path.trim();
         let region = region.trim();
         let ddns_json_dir = ddns_json_dir.trim();
+        let ttl = ttl_seconds.map(|t| Duration::from_secs(t as u64));
 
         /* Check Empties */
         if robocerts_bucket.is_empty() {
@@ -59,6 +69,7 @@ impl ConfigClient {
         Ok(ConfigClient {
             is_dry_run,
             domain: domain.to_lowercase(),
+            ttl,
             signing_key,
             s3_robocerts_bucket: robocerts_bucket.to_owned(),
             s3_robocerts_ddns_json_directory: ddns_json_dir.to_owned(),
@@ -153,7 +164,8 @@ lol/fixme
     }
 
     #[test]
-    fn t2() {
+    fn check_cert_loaading_match_common_name() {
+        const COMMON_NAME: &str = "03964696.graviorobotics.com";
         const CERT: &str = "-----BEGIN CERTIFICATE-----
 MIICozCCAgWgAwIBAgIId7SmsKcLikwwCgYIKoZIzj0EAwMwgcIxCzAJBgNVBAYT
 AkpQMQ4wDAYDVQQIEwVUb2t5bzEQMA4GA1UEBxMHU2hpYnV5YTEcMBoGA1UEChMT
@@ -176,6 +188,6 @@ eMuhW+wTWQ==
         let certmatch = keys::load_ed25519_certificate_pem(CERT.as_bytes());
         assert!(certmatch.is_ok());
         let certmatch = certmatch.unwrap();
-        assert_eq!("03964696.graviorobotics.com", certmatch.common_name);
+        assert_eq!(COMMON_NAME, certmatch.common_name);
     }
 }
