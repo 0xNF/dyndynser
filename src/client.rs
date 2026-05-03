@@ -12,7 +12,7 @@ use crate::signatures;
 // In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
 pub fn handle_client(
     is_dry_run: bool,
-    s3_robocerts_bucket: &str,
+    s3_bucket: &str,
     s3_ddns_json_dir: &str,
     domain: &str,
     ttl: Option<u32>,
@@ -23,7 +23,7 @@ pub fn handle_client(
     log::info!("parsing Client Config");
     let conf = ConfigClient::parse(
         is_dry_run,
-        s3_robocerts_bucket,
+        s3_bucket,
         s3_ddns_json_dir,
         domain,
         ttl,
@@ -62,7 +62,7 @@ pub fn handle_client(
     if conf.is_dry_run {
         println!(
             "Will write to: s3://{}{}\nJSON:\n{}",
-            s3_robocerts_bucket,
+            s3_bucket,
             ddns_json_path,
             String::from_utf8_lossy(&signed_json_bytes)
         );

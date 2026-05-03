@@ -39,7 +39,7 @@ impl ConfigClient {
         signing_key_password: Option<&str>,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
-        let robocerts_bucket = s3_bucket.trim();
+        let s3_bucket = s3_bucket.trim();
         let domain = domain.trim();
         let key_path = key_path.trim();
         let region = region.trim();
@@ -47,8 +47,8 @@ impl ConfigClient {
         let ttl = ttl_seconds.map(|t| Duration::from_secs(t as u64));
 
         /* Check Empties */
-        if robocerts_bucket.is_empty() {
-            Err(anyhow::anyhow!("Robocerts S3 Bucket cannot be empty"))?;
+        if s3_bucket.is_empty() {
+            Err(anyhow::anyhow!("S3 Bucket cannot be empty"))?;
         } else if domain.is_empty() {
             Err(anyhow::anyhow!("subdomain to update cannot be empty"))?;
         } else if key_path.is_empty() {
@@ -56,7 +56,7 @@ impl ConfigClient {
         } else if region.is_empty() {
             Err(anyhow::anyhow!("Amazon Region cannot be empty"))?;
         } else if ddns_json_dir.is_empty() {
-            Err(anyhow::anyhow!("Robocerts ddns json path cannot be empty"))?;
+            Err(anyhow::anyhow!("s3 bucket ddns json path cannot be empty"))?;
         }
 
         /* Find and load the keyfile bytes */
@@ -68,7 +68,7 @@ impl ConfigClient {
             domain: domain.to_lowercase(),
             ttl,
             signing_key,
-            s3_bucket: robocerts_bucket.to_owned(),
+            s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
@@ -107,15 +107,15 @@ impl ConfigServer {
         keys_search_path: &str,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
-        let robocerts_bucket = s3_bucket.trim();
+        let s3_bucket = s3_bucket.trim();
         let ddns_json_dir = ddns_json_dir.trim();
         let ddns_file_path = ddns_file_path.trim();
         let keys_search_path = keys_search_path.trim();
         let region = region.trim();
 
         /* Check Empties */
-        if robocerts_bucket.is_empty() {
-            return Err(anyhow::anyhow!("Robocerts S3 Bucket cannot be empty"));
+        if s3_bucket.is_empty() {
+            return Err(anyhow::anyhow!("S3 Bucket cannot be empty"));
         } else if ddns_file_path.is_empty() {
             return Err(anyhow::anyhow!("ddns_file_path cannot be empty"));
         } else if keys_search_path.is_empty() {
@@ -123,14 +123,14 @@ impl ConfigServer {
         } else if region.is_empty() {
             Err(anyhow::anyhow!("Amazon Region cannot be empty"))?;
         } else if ddns_json_dir.is_empty() {
-            Err(anyhow::anyhow!("Robocerts ddns json path cannot be empty"))?;
+            Err(anyhow::anyhow!("bucket ddns json path cannot be empty"))?;
         }
 
         Ok(ConfigServer {
             is_dry_run,
             ddns_file_path: ddns_file_path.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
-            s3_bucket: robocerts_bucket.to_owned(),
+            s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })

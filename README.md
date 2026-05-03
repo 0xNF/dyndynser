@@ -75,10 +75,10 @@ Assume the following environment variables: `signingkey=path/to/sub.example.com.
 
 ### Help:
 ```bash
-Usage: dyndynser client [OPTIONS] <ROBOCERTS_BUCKET> <S3_DDNS_JSON_DIR> <DOMAIN> <KEY_PATH> <REGION>
+Usage: dyndynser client [OPTIONS] <S3_Bucket> <S3_DDNS_JSON_DIR> <DOMAIN> <KEY_PATH> <REGION>
 
 Arguments:
-  <ROBOCERTS_BUCKET>
+  <S3_BUCKET>
   <S3_DDNS_JSON_DIR>
   <DOMAIN>
   <KEY_PATH>
@@ -142,10 +142,10 @@ sudo chmod +rw -R /etc/dyndynser
 
 ### Help
 ```bash
-Usage: dyndynser server <S3_ROBOCERTS_BUCKET> <DDNS_FILE_PATH> <S3_DDNS_JSON_DIR> <KEYS_SEARCH_PATH> <REGION>
+Usage: dyndynser server <S3_Bucket> <DDNS_FILE_PATH> <S3_DDNS_JSON_DIR> <KEYS_SEARCH_PATH> <REGION>
 
 Arguments:
-  <S3_ROBOCERTS_BUCKET>
+  <S3_Bucket>
   <DDNS_FILE_PATH>
   <S3_DDNS_JSON_DIR>
   <KEYS_SEARCH_PATH>
