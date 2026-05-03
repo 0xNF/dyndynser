@@ -398,3 +398,58 @@ impl<'ltself> RunResults<'ltself> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use crate::{
+        ddns::DdnsJSON,
+        keys::{load_ed25519_certificate_pem, read_file_limited},
+        server::check_valid_ddns_request,
+        signatures::SignedJSON,
+    };
+
+    #[test]
+    fn sign_and_validate_a_record() {
+        let record = DdnsJSON {
+            domain: "augs.sarif.example".to_owned(),
+            ip: std::net::IpAddr::V4(std::net::Ipv4Addr::from_str("192.168.1.1").unwrap()),
+            ttl: None,
+        };
+
+        /* Load the private key for signing */
+        let keybytes = read_file_limited("test/certs/augs.sarif.example.priv", 1400).unwrap();
+        let private_key = crate::keys::load_ed25519_private_key(&keybytes, None).unwrap();
+
+        /* Sign the Record */
+        let signed_bytes = crate::client::sign_object(&private_key, record).unwrap();
+        let reserded_bytes = serde_json::from_slice::<SignedJSON<DdnsJSON>>(&signed_bytes).unwrap();
+
+        /* Load the public key for validating */
+        let certbytes = read_file_limited("test/certs/augs.sarif.example.crt", 1400);
+        assert!(
+            certbytes.is_ok(),
+            "expected to read certificate file bytes from file underneath 1024kb limit",
+        );
+        let certbytes = certbytes.unwrap();
+        let cert = load_ed25519_certificate_pem(&certbytes);
+        assert!(
+            cert.is_ok(),
+            "expected augs.sarif.example.crt to be loaded as an x509 cert file"
+        );
+        let cert = cert.unwrap();
+        assert_eq!(
+            &cert.common_name, "augs.sarif.example",
+            "expected common name of cert to augs.sarif.example"
+        );
+
+        assert_eq!(
+            &cert.common_name, &reserded_bytes.payload.domain,
+            "expected cert.common_name to be same as the reserded_bytes domain request"
+        );
+
+        let res = check_valid_ddns_request(&reserded_bytes, &vec![cert]);
+        assert!(res.is_ok(), "expected signature to pass validation");
+    }
+}

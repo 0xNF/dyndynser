@@ -4,9 +4,6 @@ use anyhow::Context;
 
 use crate::keys;
 
-// 5 minutes default ttl if not specified
-const DEFAULT_TTL: u32 = 300;
-
 #[derive(Debug)]
 pub struct ConfigClient {
     // S3 Bucket id to push $domain.json files
@@ -144,50 +141,5 @@ impl ConfigServer {
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use ed25519_dalek::pkcs8::DecodePrivateKey;
-
-    use crate::keys;
-
-    #[test]
-    fn test_load_private_ed25519_openssl_key() {
-        const KEY: &str = "-----BEGIN PRIVATE KEY-----
-lol/fixme
------END PRIVATE KEY-----";
-        let signing_key = ed25519_dalek::SigningKey::from_pkcs8_pem(KEY);
-        assert!(signing_key.is_ok(), "should have gotten a signing key");
-        println!("{:?}", signing_key);
-    }
-
-    #[test]
-    fn check_cert_loaading_match_common_name() {
-        const COMMON_NAME: &str = "03964696.graviorobotics.com";
-        const CERT: &str = "-----BEGIN CERTIFICATE-----
-MIICozCCAgWgAwIBAgIId7SmsKcLikwwCgYIKoZIzj0EAwMwgcIxCzAJBgNVBAYT
-AkpQMQ4wDAYDVQQIEwVUb2t5bzEQMA4GA1UEBxMHU2hpYnV5YTEcMBoGA1UEChMT
-QXN0ZXJpYSBDb3Jwb3JhdGlvbjEYMBYGA1UECxMPR3JhdmlvIFJvYm90aWNzMS0w
-KwYDVQQDEyRHcmF2aW8gUm9ib3RpY3MgRzEgU3ViLUNBIGdyYXZpby5jb20xKjAo
-BgkqhkiG9w0BCQEWG3NlY3VyaXR5QGdyYXZpb3JvYm90aWNzLmNvbTAeFw0yNjA1
-MDIwODUxMDBaFw00MTA1MDIwODUxMDBaMIG6MQswCQYDVQQGEwJKUDEOMAwGA1UE
-CBMFVG9reW8xEDAOBgNVBAcTB1NoaWJ1eWExGDAWBgNVBAoTD0dyYXZpbyBSb2Jv
-dGljczEdMBsGA1UECxMUSW5mb3JtYXRpb24gU2VjdXJpdHkxJDAiBgNVBAMTGzAz
-OTY0Njk2LmdyYXZpb3JvYm90aWNzLmNvbTEqMCgGCSqGSIb3DQEJARYbc2VjdXJp
-dHlAZ3Jhdmlvcm9ib3RpY3MuY29tMCowBQYDK2VwAyEALh18LjZhLYgHl8I8V8z+
-cwcEhvqy/A79LKxC5yFoa6GjGjAYMAkGA1UdEwQCMAAwCwYDVR0PBAQDAgeAMAoG
-CCqGSM49BAMDA4GLADCBhwJCAXWwBKrHGz+4mmHLPViBe5TcLNmY5JN7FOBJBOjN
-zTalVEXAolmjpr45heEWSBnuhhhPahk/59wapIsmUtMbdFhEAkF8PfX3npAz7pmG
-ehwiEszuAfzsI5kAn6xnfy67Oqm7Y++F4/Ga+2ZviYFaDlmAR2IUqw4jcU8uyc3b
-eMuhW+wTWQ==
------END CERTIFICATE-----
-";
-
-        let certmatch = keys::load_ed25519_certificate_pem(CERT.as_bytes());
-        assert!(certmatch.is_ok());
-        let certmatch = certmatch.unwrap();
-        assert_eq!(COMMON_NAME, certmatch.common_name);
     }
 }

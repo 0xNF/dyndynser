@@ -110,7 +110,7 @@ fn query_for_ip() -> Result<std::net::IpAddr, anyhow::Error> {
     Ok(ip_addr)
 }
 
-fn sign_object(
+pub fn sign_object(
     signing_key: &ed25519_dalek::SigningKey,
     serder: impl serde::Serialize,
 ) -> Result<Vec<u8>, anyhow::Error> {

@@ -38,6 +38,7 @@ pub enum SubCommands {
         s3_bucket: String,
         s3_ddns_json_dir: String,
         domain: String,
+        #[arg(long)]
         ttl: Option<u32>,
         key_path: String,
 

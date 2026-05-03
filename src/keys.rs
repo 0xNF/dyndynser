@@ -2,7 +2,6 @@ use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Context, Ok};
-use ed25519_dalek::pkcs8::DecodePublicKey;
 use ed25519_dalek::{VerifyingKey, pkcs8::DecodePrivateKey};
 use x509_cert::der::DecodePem;
 use x509_cert::der::asn1::{PrintableStringRef, Utf8StringRef};
@@ -17,18 +16,18 @@ pub struct CertMatch {
     pub verifying_key: VerifyingKey,
 }
 
-// TODO: Figure out where to call this, if we should pass in an --x509 flag, etc
+// Parses the given bytes as an X.509 Certificate PEM file and extracts the CommonName / Public Key from it
 pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyhow::Error> {
     let cert_bytes = cert_bytes.trim_ascii();
     let cert = Certificate::from_pem(&cert_bytes)
         .context("Could not parse into an x509 PEM certificate")?;
 
-    let spki = &cert.tbs_certificate.subject_public_key_info;
-    let pki = spki
+    let subject_public_key = &cert.tbs_certificate.subject_public_key_info;
+    let subject_public_key_as_bytes = subject_public_key
         .subject_public_key
         .as_bytes()
         .ok_or_else(|| anyhow::anyhow!("unable to extract Public Key bytes"))?;
-    let pub_key_bytes: [u8; 32] = pki
+    let pub_key_bytes: [u8; 32] = subject_public_key_as_bytes
         .try_into()
         .context("Public Key bytes were retrieved but size was not 32")?;
     let verifying_key = VerifyingKey::from_bytes(&pub_key_bytes)
@@ -65,44 +64,8 @@ pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyh
     Ok(certmatch)
 }
 
-pub fn load_ed25519_public_key(key_bytes: &[u8]) -> Result<VerifyingKey, anyhow::Error> {
-    let key_bytes = key_bytes.trim_ascii();
-    let verifying_key: VerifyingKey =
-        if key_bytes.starts_with(signatures::OPENSSH_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::debug!("key looks like an OpenSSH public key, will try to parse it");
-            load_ed25519_openssh_public_key(&key_bytes)?
-        } else if key_bytes.starts_with(signatures::OPENSSL_PREFIX_PUBLIC_KEY.as_bytes()) {
-            log::info!("Key is non-openssh public key");
-            load_ed25519_openssl_public_key(&key_bytes)?
-        } else {
-            return Err(anyhow::anyhow!(
-                "Supplied verifying key was not a valid supported format"
-            ));
-        };
-
-    Ok(verifying_key)
-}
-
-fn load_ed25519_openssh_public_key(key_bytes: &[u8]) -> Result<VerifyingKey, anyhow::Error> {
-    let pubkey = ssh_key::PublicKey::from_openssh(&String::from_utf8_lossy(&key_bytes))
-        .context("failed to parse key as openssh despite beginnign with `ssh-`")?;
-
-    let ed25519 = pubkey
-        .key_data()
-        .ed25519()
-        .context("this openssh key is not ED25519")?;
-
-    let vk = VerifyingKey::from_bytes(&ed25519.0)
-        .context("could not parse openssh key bytes into an ed25519 Verifying Key")?;
-
-    Ok(vk)
-}
-
-fn load_ed25519_openssl_public_key(key_bytes: &[u8]) -> Result<VerifyingKey, anyhow::Error> {
-    ed25519_dalek::VerifyingKey::from_public_key_pem(&String::from_utf8_lossy(&key_bytes))
-        .context("failed to parse bytes as a PEM OpenSSL public key")
-}
-
+// Parses the given bytes as an Ed25519 formatted private key
+// Takes an optional Password in case this key is encrypted
 pub fn load_ed25519_private_key(
     key_bytes: &[u8],
     key_password: Option<&str>,
@@ -123,6 +86,8 @@ pub fn load_ed25519_private_key(
     Ok(signing_key)
 }
 
+// Parses the given bytes as an Ed25519 formatted OpenSSH private key
+// Takes an optional Password in case this key is encrypted
 fn load_ed25519_openssh_private_key(
     key_bytes: &[u8],
     key_password: Option<&str>,
@@ -158,12 +123,14 @@ fn load_ed25519_openssh_private_key(
     Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
 }
 
+// Parses the given bytes as an OopenSSL Ed25199 formatted private key
 fn load_ed25519_openssl_key(key_bytes: &[u8]) -> Result<ed25519_dalek::SigningKey, anyhow::Error> {
     let s: &str = std::str::from_utf8(key_bytes).context("not a valid utf8 string")?;
     ed25519_dalek::SigningKey::from_pkcs8_pem(s)
         .context("failed to decode pkcs8 pem bytes from signing key")
 }
 
+// Reads a maximium of `max_bytes` from the given File Path
 pub fn read_file_limited<P: AsRef<Path>>(
     path: P,
     max_bytes: u64,
@@ -189,4 +156,13 @@ pub fn read_file_limited<P: AsRef<Path>>(
         )))?;
 
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_file_too_big() {
+        let f = super::read_file_limited("test/files/too_big.bin", 50);
+        assert!(f.is_err(), "expected file to error out after 1024 bytes");
+    }
 }
