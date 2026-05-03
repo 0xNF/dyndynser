@@ -63,6 +63,13 @@ Before using either the client or server, gernate an ed25119 public / private ke
 
 ## Client
 
+Optional: Create a ddns client directory:
+
+```bash
+sudo mkdir -p /etc/dyndynser/owneddomains
+sudo chmod +rw -R /etc/dyndynser
+```
+
 
 Assume the following environment variables: `signingkey=path/to/sub.example.com.priv`, `region=us-east-1`, `s3bucket=somebucket`, `domain=sub.example.com`, `s3path=/ddns/domains` and assume that the key is _not_ password protected:
 
@@ -125,6 +132,13 @@ The server side is architected such that many errors are non-blocking. The only 
 Other errors, such as malformed JSON ddns requests, malformed keys, or mismatched signatures, only cause errors to be reported, but do not terminate the program.
 
 This is so that invalid configurations by the client can't DOS the service, and records will continue to be updated.
+
+Optional: Create a ddns server directory:
+
+```bash
+sudo mkdir -p /etc/dyndynser/knownkeys
+sudo chmod +rw -R /etc/dyndynser
+```
 
 ### Help
 ```bash

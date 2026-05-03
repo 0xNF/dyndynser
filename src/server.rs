@@ -225,10 +225,10 @@ pub fn handle_server(
     if conf.is_dry_run {
         println!("Will write this yaml:\n```yaml\n{}\n```", yaml_str);
         println!();
-        // println!(
-        //     "will delete the following s3 bucket items: {}",
-        //     results.unverified_jsons
-        // );
+        println!(
+            "will delete the following s3 bucket items: {:?}",
+            results.unverified_jsons
+        );
         return Ok(());
     }
 
@@ -255,12 +255,12 @@ fn fetch_ddns_jsons_from_s3<'unverified>(
         .region
         .parse()
         .context("invalid AWS region found during S3 write")?;
-    let bucket = s3::Bucket::new(&conf.s3_robocerts_bucket, region, credentials)
+    let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials)
         .context("failed to rerieve s3 credentials")?;
 
     println!(
         "Querying Bucket: {}/{}",
-        &conf.s3_robocerts_bucket, &conf.s3_bucket_ddns_json_directory
+        &conf.s3_bucket, &conf.s3_bucket_ddns_json_directory
     );
 
     /* S3 iteration  */

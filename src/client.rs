@@ -55,7 +55,7 @@ pub fn handle_client(
     log::info!("Shelling out to invoke into S3");
     let ddns_json_path = format!(
         "{}/{}",
-        conf.s3_robocerts_ddns_json_directory,
+        conf.s3_bucket_ddns_json_directory,
         ddns_obj.make_filename()
     );
 
@@ -73,19 +73,25 @@ pub fn handle_client(
             .context("invalid AWS region found during S3 write")?;
         let credentials =
             s3::creds::Credentials::default().context("failed to retrieve s3 credentials")?;
-        let bucket = s3::Bucket::new(&conf.s3_robocerts_bucket, region, credentials)?;
+        let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials)?;
 
-        let written_path = bucket
-            .put_object_with_content_type(ddns_json_path, &signed_json_bytes, "application/json")
+        let s3_response = bucket
+            .put_object_with_content_type(&ddns_json_path, &signed_json_bytes, "application/json")
             .context("failed to put S3 object")?;
-        if written_path.status_code() != 200 {
+        if s3_response.status_code() != 200 {
             Err(anyhow::anyhow!("s3 returned non-200"))?;
         }
-        log::info!("Successfully uploaded S3 ddns json: {}", written_path);
+        log::info!("Successfully uploaded S3 ddns json: {}", s3_response);
+
+        println!(
+            "Successfully wrote domain request for '{}' to s3 bucket.\nFile key: {}",
+            &ddns_obj.domain, ddns_json_path,
+        );
     }
     Ok(())
 }
 
+// Queries a cannonical Amazon AWS url for the IP of the machine running this binary
 fn query_for_ip() -> Result<std::net::IpAddr, anyhow::Error> {
     const URL: &str = "https://checkip.amazonaws.com";
     let res = reqwest::blocking::get(URL).context("failed to check IP address")?;
@@ -110,6 +116,7 @@ fn query_for_ip() -> Result<std::net::IpAddr, anyhow::Error> {
     Ok(ip_addr)
 }
 
+// Signs anything that be JSON-serialized with the given signing key, producing a new object which contains the signature, and the object that was signed
 pub fn sign_object(
     signing_key: &ed25519_dalek::SigningKey,
     serder: impl serde::Serialize,

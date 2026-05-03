@@ -7,10 +7,10 @@ use crate::keys;
 #[derive(Debug)]
 pub struct ConfigClient {
     // S3 Bucket id to push $domain.json files
-    pub s3_robocerts_bucket: String,
+    pub s3_bucket: String,
 
     // Path on the S3 bucket to place -ddns.json files
-    pub s3_robocerts_ddns_json_directory: String,
+    pub s3_bucket_ddns_json_directory: String,
 
     // AWS Region, like us-east-1
     pub region: String,
@@ -31,7 +31,7 @@ pub struct ConfigClient {
 impl ConfigClient {
     pub fn parse(
         is_dry_run: bool,
-        robocerts_bucket: &str,
+        s3_bucket: &str,
         ddns_json_dir: &str,
         domain: &str,
         ttl_seconds: Option<u32>,
@@ -39,7 +39,7 @@ impl ConfigClient {
         signing_key_password: Option<&str>,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
-        let robocerts_bucket = robocerts_bucket.trim();
+        let robocerts_bucket = s3_bucket.trim();
         let domain = domain.trim();
         let key_path = key_path.trim();
         let region = region.trim();
@@ -68,8 +68,8 @@ impl ConfigClient {
             domain: domain.to_lowercase(),
             ttl,
             signing_key,
-            s3_robocerts_bucket: robocerts_bucket.to_owned(),
-            s3_robocerts_ddns_json_directory: ddns_json_dir.to_owned(),
+            s3_bucket: robocerts_bucket.to_owned(),
+            s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
     }
@@ -84,7 +84,7 @@ pub struct ConfigServer {
     pub ddns_file_path: String,
 
     // S3 Bucket id to search for $domain.json files
-    pub s3_robocerts_bucket: String,
+    pub s3_bucket: String,
 
     // Path on the S3 bucket to search for -ddns.json files
     pub s3_bucket_ddns_json_directory: String,
@@ -106,14 +106,14 @@ impl ConfigServer {
         is_dry_run: bool,
         is_s3_delete_after_success: bool,
 
-        robocerts_bucket: &str,
+        s3_bucket: &str,
         ddns_json_dir: &str,
 
         ddns_file_path: &str,
         keys_search_path: &str,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
-        let robocerts_bucket = robocerts_bucket.trim();
+        let robocerts_bucket = s3_bucket.trim();
         let ddns_json_dir = ddns_json_dir.trim();
         let ddns_file_path = ddns_file_path.trim();
         let keys_search_path = keys_search_path.trim();
@@ -137,7 +137,7 @@ impl ConfigServer {
             is_s3_delete_after_success,
             ddns_file_path: ddns_file_path.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
-            s3_robocerts_bucket: robocerts_bucket.to_owned(),
+            s3_bucket: robocerts_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
         })
