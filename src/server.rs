@@ -1,28 +1,30 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 use anyhow::Context;
-use ed25519_dalek::VerifyingKey;
+
+// We are dealing with keys, certificates, and small json files. We wil limit to at most 10kb
+const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 
 use crate::{
     config::*,
     ddns::{self, DDNSRoute53Config, DdnsJSON, DdnsRoute53Record},
-    keys,
+    keys::{self, CertMatch},
     signatures::{self, SignedJSON},
 };
 
-fn get_public_key_map(
+// Load all the known .crt files into memory at once
+fn get_public_key_map<'cert>(
     conf: &ConfigServer,
     results: &mut RunResults,
-) -> Result<HashMap<String, ed25519_dalek::VerifyingKey>, anyhow::Error> {
-    let mut hm: HashMap<String, ed25519_dalek::VerifyingKey> = HashMap::new();
-
+) -> Result<Vec<CertMatch>, anyhow::Error> {
+    let mut v: Vec<CertMatch> = Vec::new();
     /* for each key, accumulate errors. don't fail all just because one key is bad
      * * use the Domain portion to find the corresponding public key
      * * check signature is valid
      * * if valid, put into collected ddns struct
      */
 
-    /* Get list of .pub key files known to this server */
+    /* Get list of .crt key files known to this server */
     let list_pub_key_files = std::fs::read_dir(&conf.keys_search_path)
         .context("failed to read known key search path")?
         .filter_map(|entry| entry.ok())
@@ -32,44 +34,40 @@ fn get_public_key_map(
             let has_ext = entry
                 .path()
                 .extension()
-                .map(|ext| ext == signatures::PUBLIC_KEY_EXT)
+                .map(|ext| ext == signatures::PUBLIC_CERT_EXT)
                 .unwrap_or(false);
 
             is_file && has_ext
         });
 
+    /* Parse each byte arr as an X509 Certificate */
     for entry in list_pub_key_files {
-        let fname = entry.file_name().to_string_lossy().to_string();
-        log::debug!("attempting to parse key found at {}", &fname);
+        log::debug!("attempting to parse key found at {:?}", &entry.file_name());
 
-        let fbytes =
-            keys::read_file_limited(entry.path(), 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+        let fbytes = keys::read_file_limited(entry.path(), FILE_SIZE_MAX_BYTES)
+            .context("invalid key_path")?;
 
-        let vk = match keys::load_ed25519_public_key(&fbytes).context("failed to parse public key")
+        let crtmatch = match keys::load_ed25519_certificate_pem(&fbytes)
+            .context("failed to load an x509 certifciate from bytes")
         {
-            Ok(vk) => vk,
+            Ok(crt) => crt,
             Err(e) => {
-                results.failed_key_parses.push((fname, e));
+                results
+                    .failed_key_parses
+                    .push((entry.file_name().to_string_lossy().to_string(), e));
                 continue;
             }
         };
 
-        /* Strip .pub from the name, to match the key to the domain */
-        log::debug!(
-            "Stripping .{} suffix from {}",
-            signatures::PUBLIC_KEY_EXT,
-            fname
-        );
-        let certname = fname.strip_suffix(&format!(".{}", signatures::PUBLIC_KEY_EXT)).context("failed to strip .pub from key, this is an asserttion failure and the developer should be contacted")?;
-        hm.insert(certname.to_owned(), vk);
+        v.push(crtmatch);
     }
 
-    Ok(hm)
+    Ok(v)
 }
 
 fn check_valid_ddns_request(
     signed_json: &SignedJSON<DdnsJSON>,
-    domain_key_map: &HashMap<String, VerifyingKey>,
+    domain_key_map: &Vec<CertMatch>,
 ) -> Result<(), anyhow::Error> {
     /* Look for Matching Key of domain */
     log::info!(
@@ -77,7 +75,8 @@ fn check_valid_ddns_request(
         &signed_json.payload.domain
     );
     let vk = domain_key_map
-        .get(&signed_json.payload.domain)
+        .iter()
+        .find(|x| x.common_name == signed_json.payload.domain)
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "Received ddns request for domain '{}', but no matching key could be found",
@@ -86,13 +85,14 @@ fn check_valid_ddns_request(
         })?;
 
     /* if key is found, try to validate the signature */
-    vk.verify_strict(
-        serde_json::to_string_pretty(&signed_json.payload)
-            .context("failed to re-serialize during signature check")?
-            .as_bytes(),
-        &signed_json.signature.inner(),
-    )
-    .context("ddns json signature did not match")?;
+    vk.verifying_key
+        .verify_strict(
+            serde_json::to_string_pretty(&signed_json.payload)
+                .context("failed to re-serialize during signature check")?
+                .as_bytes(),
+            &signed_json.signature.inner(),
+        )
+        .context("ddns json signature did not match")?;
 
     Ok(())
 }
@@ -137,13 +137,13 @@ pub fn handle_server(
     });
 
     /* Get Keys */
-    let domain_key_map =
+    let domain_certs =
         get_public_key_map(&conf, &mut results).context("failed to get public key map")?;
 
-    log::debug!("known domain keys: {:?}", &domain_key_map.keys());
+    log::debug!("known domain keys: {:?}", &domain_certs);
 
     /* Check Keys exist */
-    if domain_key_map.is_empty() {
+    if domain_certs.is_empty() {
         println!("No public keys found, nothing to validate.");
         return Ok(());
     }
@@ -154,7 +154,7 @@ pub fn handle_server(
             "Checking signature of '{}' ddns request",
             &signed_json.payload.domain
         );
-        match check_valid_ddns_request(&signed_json, &domain_key_map)
+        match check_valid_ddns_request(&signed_json, &domain_certs)
             .context("failed to check signing key request")
         {
             Ok(_) => {

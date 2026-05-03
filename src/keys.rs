@@ -11,6 +11,7 @@ use x509_cert::*;
 
 use crate::signatures;
 
+#[derive(Debug)]
 pub struct CertMatch {
     pub common_name: String,
     pub verifying_key: VerifyingKey,
