@@ -4,9 +4,9 @@ The purpose of this program is to securely request DDNS updates over Route53. Th
 
 Dyndynser runs in two modes: Client Mode, and Server Mode.
 
-# Building
+# Requirements
 
-## Requirements
+## Buiding
 
 * Rust 1.70+
   
@@ -14,28 +14,30 @@ Dyndynser runs in two modes: Client Mode, and Server Mode.
 cargo build
 ```
 
-# AWS Requirements
+## AWS Requirements
 * Writeable S3 bucket to store ddns request info
 
-# Runtime / Environment Requirements
+### Runtime / Environment Requirements
 
-## Bothg
+### Both
 * Running on an AWS EC2 instance
 
-## Client
-* Permissions: EC2 Instance Role with IAM priveldges for `s3:write` to your bucket of choice
-* Firewall: Ability to query `https://checkip.amazonaws.com` for an ip
-* An ED25519 _Private_ Key for the domain to sign for
+### Client
+* Permissions: 
+  * EC2 Instance Role with IAM priveldges for `s3:write` to your bucket of choice
+* Firewall:
+  * Ability to query `https://checkip.amazonaws.com` for an ip
+* An ED25519 _Private_ Key for the domain to sign for, derived from an X.509 Certificate
   * formats include: `openssh`, and `ssh-keygen`, either is fine
   * password optional
 
 
-## Server
+### Server
 * Permissions: 
   * EC2 Instance Role with IAM priveliges for `s3:read` from your bucket of choice
   * EC2 Instance Role with IAM privelides for `route53:read,write` to your main domain 
-* An Ed25519 _Public_ Key of each domain to validate ddns requests for
-* [ddns-route53](https://github.com/crazy-max/ddns-route53) and a `ddns.yaml` file
+* An X.509 Certificate with a `CN` equal to the FQDN of the domain to update, and Key Usages of `Digital Signature`, `Non Repudiation`.
+* [ddns-route53](https://github.com/crazy-max/ddns-route53) with a filled-out `ddns-route53.yaml` file
 
 
 # Usage
@@ -55,11 +57,14 @@ Before using either the client or server, gernate an ed25119 public / private ke
     openssl pkey -in sub.example.com.priv -pubout -out sub.example.com.pub
     ```
 
-2. Move the public key to the Server's `$dyndynser/known_keys/` directory
+2. Move the Certificate to the Server's `/etc/dyndynser/knownkeys/` directory
     ```bash
-    mv sub.example.com.pub $dyndynser/known_keys
+    mv sub.domain.example.crt /etc/dyndynser/knownkeys/
     ```
-3. Move the private key to any safe space on the Client EC2 instance
+3. Move the private key to any safe space on the Client EC2 instance, for instance, the `/etc/dyndynser/owneddomains/` directory:
+    ```bash
+    mv sub.domain.example.priv /etc/dyndynser/owneddomains/
+    ```
 
 ## Client
 
@@ -71,33 +76,45 @@ sudo chmod +rw -R /etc/dyndynser
 ```
 
 
-Assume the following environment variables: `signingkey=path/to/sub.example.com.priv`, `region=us-east-1`, `s3bucket=somebucket`, `domain=sub.example.com`, `s3path=/ddns/domains` and assume that the key is _not_ password protected:
+Assume the following environment variables: `signingkey=/etc/dyndynser/owneddomains/sub.domain.example.priv`, `region=us-east-1`, `s3bucket=somebucket`, `domain=sub.domain.example`, `s3path=/ddns/domains` and assume that the key is _not_ password protected:
 
 ### Help:
 ```bash
-Usage: dyndynser client [OPTIONS] <S3_Bucket> <S3_DDNS_JSON_DIR> <DOMAIN> <KEY_PATH> <REGION>
+dyndynser client --help
 
-Arguments:
-  <S3_BUCKET>
-  <S3_DDNS_JSON_DIR>
-  <DOMAIN>
-  <KEY_PATH>
-  <REGION>
+Run in client mode, publishing a signed DDNS update request to S3 for the server to process. The update is cryptographically signed using the provided private key so the server can verify authenticity
+
+Usage: dyndynser client [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --domain <DOMAIN> --key-path <KEY_PATH> --aws-region <AWS_REGION>
 
 Options:
-      --signing-key-password <SIGNING_KEY_PASSWORD>
       --dry-run
+          Simulate all operations without writing any DNS changes to S3. Will print what would otherwise be updated.
+      --bucket <S3_BUCKET>
+          S3 bucket name used as the DDNS backend
+      --bucket-ddns-dir <S3_DDNS_JSON_DIR>
+          S3 key prefix (directory) for pending DDNS update JSON files
+      --domain <DOMAIN>
+          Fully-qualified domain name to update (e.g. home.example.com)
+      --ttl <TTL>
+          DNS record TTL in seconds (uses server default if omitted)
+      --key-path <KEY_PATH>
+          Path to the PEM-encoded Ed25519 private key file for signing
+      --signing-key-password <SIGNING_KEY_PASSWORD>
+          Passphrase to decrypt the private key (omit if the key is not encrypted) [env: DYNDYNSER__SIGNING_KEY_PASSWORD=]
+      --aws-region <AWS_REGION>
+          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER__AWS_REGION=]
   -h, --help
+          Print help
 ```
 
 ### Dry Run, test what will be written:
 ```bash
-dyndynser client --dry-run $s3bucket $s3path $signingkey $region
+dyndynser client --dry-run --bucket $s3bucket --bucket-ddns-dir $s3path --key-path $signingkey --aws-region $region
 Will write to: s3://somebucket/ddns/domains/sub.example.com.ddns.json
 JSON:
 {
   "payload": {
-    "domain": "sub.example.com",
+    "domain": "sub.domain.example",
     "ip": "200.100.50.25"
   },
   "signature": "f94a75062c62be661fe353d5330c659f742e8e51be4b477c5f4256cb220b3659c01c4680bb9b2db5198b9d8eeb2d5fa4a1d0857df68d71c1913bf1ce72d7f403"
@@ -110,7 +127,7 @@ aws s3api list-objects-v2 --bucket $s3bucket
 {
     "Contents": [
         {
-            "Key": "ddns/domains/sub.example.com.ddns.json",
+            "Key": "ddns/domains/sub.domain.example.ddns.json",
             "LastModified": "2026-05-01T05:22:45+00:00",
             "ETag": "\"526f2dcba8bd205387e39d092ab6fe0c\"",
             "ChecksumAlgorithm": [
@@ -142,15 +159,23 @@ sudo chmod +rw -R /etc/dyndynser
 
 ### Help
 ```bash
-Usage: dyndynser server <S3_Bucket> <DDNS_FILE_PATH> <S3_DDNS_JSON_DIR> <KEYS_SEARCH_PATH> <REGION>
+dyndynser server --help
 
-Arguments:
-  <S3_Bucket>
-  <DDNS_FILE_PATH>
-  <S3_DDNS_JSON_DIR>
-  <KEYS_SEARCH_PATH>
-  <REGION>
+Usage: dyndynser server [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --ddns-config-file <DDNS_FILE_PATH> --keys-search-path <KEYS_SEARCH_PATH> --aws-region <AWS_REGION>
 
 Options:
-  -h, --help  Print help
+      --dry-run
+          Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything ti Route53. Will print what would otherwise be updated.
+      --bucket <S3_BUCKET>
+          S3 bucket name used as the DDNS backend
+      --bucket-ddns-dir <S3_DDNS_JSON_DIR>
+          S3 key prefix (directory) for pending DDNS update JSON files
+      --ddns-config-file <DDNS_FILE_PATH>
+          Path to the local ddns-route53.yaml configuration file
+      --keys-search-path <KEYS_SEARCH_PATH>
+          Directory to search for trusted public key files used in signature verification
+      --aws-region <AWS_REGION>
+          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER__AWS_REGION=]
+  -h, --help
+          Print help
 ```
