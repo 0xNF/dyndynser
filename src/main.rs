@@ -44,10 +44,11 @@ pub enum SubCommands {
         s3_ddns_json_dir: String,
 
         #[arg(
-            long = "ddns-config-file",
-            help = "Path to the local ddns-route53.yaml configuration file"
+            long = "hosted-zone-id",
+            help = "Id of the Local Hosted DNS Zone",
+            env = "DYNDYNSER_AWS_HOSTED_ZONE_ID"
         )]
-        ddns_file_path: String,
+        hosted_dns_zone_id: String,
 
         #[arg(
             long = "keys-search-path",
@@ -58,7 +59,7 @@ pub enum SubCommands {
         #[arg(
             long = "aws-region",
             help = "AWS region of the S3 bucket (e.g. eu-west-1)",
-            env = "DYNDYNSER__AWS_REGION"
+            env = "DYNDYNSER_AWS_REGION"
         )]
         aws_region: String,
     },
@@ -126,14 +127,14 @@ fn main() -> anyhow::Result<()> {
             is_dry_run,
             s3_bucket,
             s3_ddns_json_dir,
-            ddns_file_path,
+            hosted_dns_zone_id,
             keys_search_path,
             aws_region: region,
         } => server::handle_server(
             is_dry_run,
             &s3_bucket,
             &s3_ddns_json_dir,
-            &ddns_file_path,
+            &hosted_dns_zone_id,
             &keys_search_path,
             &region,
         ),

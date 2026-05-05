@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -7,6 +5,7 @@ pub struct DdnsJSON {
     // FQDN to set DNS records for
     #[serde(rename = "domain")]
     pub domain: String,
+
     // IP, 4 or 6, to point the record to
     #[serde(rename = "ip")]
     pub ip: std::net::IpAddr,

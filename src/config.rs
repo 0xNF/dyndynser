@@ -80,14 +80,14 @@ pub struct ConfigServer {
     // Where to search for authorized public keys on the server
     pub keys_search_path: String,
 
-    // Where to read/write the ddns yaml file
-    pub ddns_file_path: String,
-
     // S3 Bucket id to search for $domain.json files
     pub s3_bucket: String,
 
     // Path on the S3 bucket to search for -ddns.json files
     pub s3_bucket_ddns_json_directory: String,
+
+    // AWS DNS Hosted Zone Id
+    pub hosted_dns_zone_id: String,
 
     // AWS Region, like us-east-1
     pub region: String,
@@ -102,22 +102,22 @@ impl ConfigServer {
 
         s3_bucket: &str,
         ddns_json_dir: &str,
+        hosted_dns_zone_id: &str,
 
-        ddns_file_path: &str,
         keys_search_path: &str,
         region: &str,
     ) -> Result<Self, anyhow::Error> {
         let s3_bucket = s3_bucket.trim();
         let ddns_json_dir = ddns_json_dir.trim();
-        let ddns_file_path = ddns_file_path.trim();
+        let hosted_dns_zone_id = hosted_dns_zone_id.trim();
         let keys_search_path = keys_search_path.trim();
         let region = region.trim();
 
         /* Check Empties */
         if s3_bucket.is_empty() {
             return Err(anyhow::anyhow!("S3 Bucket cannot be empty"));
-        } else if ddns_file_path.is_empty() {
-            return Err(anyhow::anyhow!("ddns_file_path cannot be empty"));
+        } else if hosted_dns_zone_id.is_empty() {
+            return Err(anyhow::anyhow!("hosted_dns_zone_id cannot be empty"));
         } else if keys_search_path.is_empty() {
             return Err(anyhow::anyhow!("keys search path cannot be empty"));
         } else if region.is_empty() {
@@ -128,7 +128,7 @@ impl ConfigServer {
 
         Ok(ConfigServer {
             is_dry_run,
-            ddns_file_path: ddns_file_path.to_owned(),
+            hosted_dns_zone_id: hosted_dns_zone_id.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),

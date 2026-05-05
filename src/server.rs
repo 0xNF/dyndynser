@@ -8,7 +8,7 @@ const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 use crate::{
     config::*,
     ddns::{self, DdnsJSON},
-    dns::{Change, ChangeAction, RecordType, ResourceRecordSet, route53},
+    dns::{Change, route53},
     keys::{self, CertMatch},
     signatures::{self, SignedJSON},
 };
@@ -102,7 +102,7 @@ pub fn handle_server(
     is_dry_run: bool,
     s3_bucket: &str,
     s3_ddns_json_dir: &str,
-    ddns_file_path: &str,
+    hosted_dns_zone_id: &str,
     keys_search_path: &str,
     region: &str,
 ) -> Result<(), anyhow::Error> {
@@ -110,7 +110,7 @@ pub fn handle_server(
         is_dry_run,
         s3_bucket,
         s3_ddns_json_dir,
-        ddns_file_path,
+        hosted_dns_zone_id,
         keys_search_path,
         region,
     )
@@ -195,15 +195,13 @@ pub fn handle_server(
             action: crate::dns::ChangeAction::Upsert,
             record_set: crate::dns::ResourceRecordSet {
                 name: with_traiing_dot.to_string(),
-                record_type: if verified_request.ip.is_ipv4() {
-                    crate::dns::RecordType::A
-                } else if verified_request.ip.is_ipv6() {
-                    crate::dns::RecordType::AAAA
-                } else {
-                    Err(anyhow::anyhow!("Invalid record type for IP address"))?
+                data: match verified_request.ip {
+                    std::net::IpAddr::V4(ipv4_addr) => crate::dns::RecordData::A(vec![ipv4_addr]),
+                    std::net::IpAddr::V6(ipv6_addr) => {
+                        crate::dns::RecordData::AAAA(vec![ipv6_addr])
+                    }
                 },
                 ttl: 300 as u64,
-                values: vec![verified_request.ip.to_string()],
             },
         };
         changes.push(dns_change);
@@ -217,51 +215,21 @@ pub fn handle_server(
         return Ok(());
     }
 
-    let route53_client = route53::route53::Route53Client::from_s3_credentials(&credentials);
+    let route53_client = route53::route53::Route53Client::from_s3_credentials(&credentials)
+        .context("failed to construct a Route53 Client")?;
+    let change_results = route53_client
+        .change_resource_record_sets(
+            &conf.hosted_dns_zone_id,
+            Some("Updated via dyndynser"),
+            &changes,
+        )
+        .context("failed to issue a Route53 update")?;
 
-    // for valid_request in results.verified_jsons.iter() {
-    //     log::debug!(
-    //         "processing validated request for '{}'",
-    //         &valid_request.domain
-    //     );
-
-    //     let with_traiing_dot = if valid_request.domain.ends_with('.') {
-    //         Cow::Borrowed(&valid_request.domain)
-    //     } else {
-    //         log::debug!("domain didn't end with '.', adding one ourselves");
-    //         let mut owned = valid_request.domain.to_owned();
-    //         owned.push('.');
-    //         Cow::Owned(owned)
-    //     };
-
-    //     let dns_change = Change {
-    //         action: crate::dns::ChangeAction::Upsert,
-    //         record_set: crate::dns::ResourceRecordSet {
-    //             name: with_traiing_dot.to_string(),
-    //             record_type: if valid_request.ip.is_ipv4() {
-    //                 crate::dns::RecordType::A
-    //             } else if valid_request.ip.is_ipv6() {
-    //                 crate::dns::RecordType::AAAA
-    //             } else {
-    //                 Err(anyhow::anyhow!("Invalid record type for IP address"))?
-    //             },
-    //             ttl: 300 as u64,
-    //             values: vec![valid_request.ip.to_string()],
-    //         },
-    //     };
-
-    //     let changes = vec![Change {
-    //         action: ChangeAction::Upsert,
-    //         record_set: ResourceRecordSet {
-    //             name: "api.example.com.".into(),
-    //             record_type: RecordType::A,
-    //             ttl: 60,
-    //             values: vec!["203.0.113.42".into()],
-    //         },
-    //     }];
-    // }
-
-    println!("Wrote ddns-route53 config file");
+    log::info!("Updated Route53 DNS records");
+    println!(
+        "Updated Route53 DNS records:\nrequest id: {}\nrequest status:{}",
+        change_results.id, change_results.status
+    );
 
     /* trigger a ddns request automatically via a Process Command */
 
