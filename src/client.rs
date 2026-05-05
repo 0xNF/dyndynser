@@ -61,10 +61,8 @@ impl<'a> DynDynserClient<'a> {
             signature: signatures::Signature::new(sig),
         };
 
-        let signed_bytes = serde_json::to_string_pretty(&signed_payload)
-            .context("failed to jsonify the signed ddns json")?
-            .as_bytes()
-            .to_owned();
+        let signed_bytes = serde_json::to_vec_pretty(&signed_payload)
+            .context("failed to jsonify the signed ddns json")?;
 
         Ok(signed_bytes)
     }

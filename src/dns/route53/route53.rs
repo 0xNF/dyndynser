@@ -1,4 +1,5 @@
-use std::time::Duration;
+use std::fmt::Write;
+use std::{borrow::Cow, time::Duration};
 
 use anyhow::Context as _;
 
@@ -159,22 +160,16 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
         };
 
         x.push_str("      <Change>\n");
-        x.push_str(&format!("        <Action>{}</Action>\n", change.action));
+        let _ = write!(x, "        <Action>{}</Action>\n", change.action).unwrap();
         x.push_str("        <ResourceRecordSet>\n");
-        x.push_str(&format!(
-            "          <Name>{}</Name>\n",
-            xml_escape(&rrs.name)
-        ));
-        x.push_str(&format!(
-            "          <Type>{}</Type>\n",
-            rrs.data.record_type()
-        ));
-        x.push_str(&format!("          <TTL>{}</TTL>\n", rrs.ttl));
+        let _ = write!(x, "          <Name>{}</Name>\n", xml_escape(&rrs.name)).unwrap();
+        let _ = write!(x, "          <Type>{}</Type>\n", rrs.data.record_type()).unwrap();
+        let _ = write!(x, "          <TTL>{}</TTL>\n", rrs.ttl).unwrap();
         x.push_str("          <ResourceRecords>\n");
 
         for v in &values {
             x.push_str("            <ResourceRecord>\n");
-            x.push_str(&format!("              <Value>{}</Value>\n", xml_escape(v)));
+            write!(x, "              <Value>{}</Value>\n", xml_escape(v)).unwrap();
             x.push_str("            </ResourceRecord>\n");
         }
 
@@ -189,12 +184,23 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
     x
 }
 
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+fn xml_escape(s: &str) -> Cow<'_, str> {
+    if s.contains(&['&', '<', '>', '"', '\''][..]) {
+        let mut out = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '&' => out.push_str("&amp;"),
+                '<' => out.push_str("&lt;"),
+                '>' => out.push_str("&gt;"),
+                '"' => out.push_str("&quot;"),
+                '\'' => out.push_str("&apos;"),
+                _ => out.push(c),
+            }
+        }
+        Cow::Owned(out)
+    } else {
+        Cow::Borrowed(s)
+    }
 }
 
 /// Returns the trimmed text content of the first `<Tag>…</Tag>` in `xml`.

@@ -5,19 +5,16 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, str::FromStr as _};
 
 // Returns the HMAC SHA256 of the data
-fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     let mut mac =
         <Hmac<Sha256> as hmac::KeyInit>::new_from_slice(key).expect("HMAC accepts any key length");
     mac.update(data);
-    mac.finalize().into_bytes().to_vec()
+    mac.finalize().into_bytes().into()
 }
 
 // Returns the hex-encodedd SHA256 hashed bytes of data
 fn sha256_hex(data: &[u8]) -> String {
-    Sha256::digest(data)
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
+    hex::encode(Sha256::digest(data))
 }
 
 /// Compute all headers required for an AWS SigV4 request (including
@@ -65,7 +62,17 @@ pub fn aws_sigv4_headers(
         .map(|(k, v)| format!("{}:{}\n", k, v.trim()))
         .collect();
 
-    let signed_headers: String = hdrs.keys().cloned().collect::<Vec<_>>().join(";");
+    // Collect headers into a ; separated list with minimal allocations
+    let signed_headers: String = hdrs
+        .keys()
+        .enumerate()
+        .fold(String::new(), |mut acc, (i, k)| {
+            if i > 0 {
+                acc.push(';');
+            }
+            acc.push_str(k);
+            acc
+        });
 
     // `canonical_headers` already ends with '\n'; the .join("\n") below adds
     // one more before `signed_headers`, producing the required blank separator.

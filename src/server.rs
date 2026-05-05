@@ -67,7 +67,7 @@ fn get_public_key_map<'cert>(
 
 fn check_valid_ddns_request(
     signed_json: &SignedJSON<dns::ResourceRecordSet>,
-    domain_key_map: &Vec<CertMatch>,
+    domain_key_map: &[CertMatch],
 ) -> Result<(), anyhow::Error> {
     /* Look for Matching Key of domain */
     log::info!(
@@ -122,7 +122,7 @@ pub fn handle_server(
 
     /* Retrieve all the ddns requests from the s3 bucket */
     let credentials = s3::creds::Credentials::default()?;
-    let mut results = fetch_ddns_jsons_from_s3(&conf, credentials.clone())
+    let mut results = fetch_ddns_jsons_from_s3(&conf, &credentials)
         .context("failed to perform S3 read portion of server operation")?;
 
     /* Check any ddns files to operate over  */
@@ -199,7 +199,7 @@ pub fn handle_server(
         let dns_change = Change {
             action: crate::dns::ChangeAction::Upsert,
             record_set: crate::dns::ResourceRecordSet {
-                name: fixed_name.to_string(),
+                name: fixed_name.into_owned(),
                 data: verified_request.data.clone(),
                 ttl: verified_request.ttl,
             },
@@ -240,7 +240,7 @@ pub fn handle_server(
 
 fn fetch_ddns_jsons_from_s3<'unverified>(
     conf: &'unverified ConfigServer,
-    credentials: s3::creds::Credentials,
+    credentials: &s3::creds::Credentials,
 ) -> Result<RunResults<'unverified>, anyhow::Error> {
     log::info!("Fetching s3 bucket items");
     let mut results = RunResults::new();
