@@ -46,6 +46,7 @@ pub enum RecordData {
     /// `A` record — one or more IPv4 addresses.
     A(Vec<Ipv4Addr>),
     /// `AAAA` record — one or more IPv6 addresses.
+    #[allow(clippy::upper_case_acronyms)]
     AAAA(Vec<Ipv6Addr>),
 }
 

@@ -13,7 +13,7 @@ use crate::{
 };
 
 // Load all the known .crt files into memory at once
-fn get_public_key_map<'cert>(
+fn get_public_key_map(
     conf: &ConfigServer,
     results: &mut RunResults,
 ) -> Result<Vec<CertMatch>, anyhow::Error> {

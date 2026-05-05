@@ -11,19 +11,19 @@ const HOST: &str = "route53.amazonaws.com";
 const REGION: &str = "us-east-1";
 const SERVICE: &str = "route53";
 
-pub struct Route53Client {
-    access_key: String,
-    secret_key: String,
-    session_token: Option<String>,
+pub struct Route53Client<'a> {
+    access_key: &'a str,
+    secret_key: &'a str,
+    session_token: Option<&'a str>,
     /// Connection pool shared across all requests on this client instance.
     client: reqwest::blocking::Client,
 }
 
-impl Route53Client {
+impl<'a> Route53Client<'a> {
     pub fn new(
-        access_key: impl Into<String>,
-        secret_key: impl Into<String>,
-        session_token: Option<String>,
+        access_key: &'a str,
+        secret_key: &'a str,
+        session_token: Option<&'a str>,
     ) -> Result<Self, anyhow::Error> {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -31,31 +31,29 @@ impl Route53Client {
             .context("failed to build reqwest client")?;
 
         Ok(Self {
-            access_key: access_key.into(),
-            secret_key: secret_key.into(),
+            access_key,
+            secret_key,
             session_token,
             client,
         })
     }
 
     /// Build from the `rust-s3` credentials already in your project.
-    pub fn from_s3_credentials(creds: &s3::creds::Credentials) -> Result<Self, anyhow::Error> {
+    pub fn from_s3_credentials(creds: &'a s3::creds::Credentials) -> Result<Self, anyhow::Error> {
         let access_key = creds
             .access_key
             .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("credentials missing access_key"))?
-            .to_owned();
+            .ok_or_else(|| anyhow::anyhow!("credentials missing access_key"))?;
         let secret_key = creds
             .secret_key
             .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("credentials missing secret_key"))?
-            .to_owned();
+            .ok_or_else(|| anyhow::anyhow!("credentials missing secret_key"))?;
 
         // rust-s3 may use either field depending on credential source / version
         let session_token = creds
             .security_token
-            .clone()
-            .or_else(|| creds.session_token.clone());
+            .as_deref()
+            .or(creds.session_token.as_deref());
 
         Self::new(access_key, secret_key, session_token)
     }
@@ -74,9 +72,9 @@ impl Route53Client {
             body,
             SERVICE,
             REGION,
-            &self.access_key,
-            &self.secret_key,
-            self.session_token.as_deref(),
+            self.access_key,
+            self.secret_key,
+            self.session_token,
         );
         aws_signature::to_header_map(&map)
     }
@@ -126,7 +124,9 @@ impl Route53Client {
                 .unwrap_or_default()
                 .trim_start_matches("/change/")
                 .to_owned(),
-            status: extract_xml_text(&raw_xml, "Status").unwrap_or_default(),
+            status: extract_xml_text(&raw_xml, "Status")
+                .unwrap_or_default()
+                .to_owned(),
         })
     }
 }
@@ -205,10 +205,10 @@ fn xml_escape(s: &str) -> Cow<'_, str> {
 
 /// Returns the trimmed text content of the first `<Tag>…</Tag>` in `xml`.
 /// Intentionally minimal — no XML library needed for Route 53's flat responses.
-fn extract_xml_text(xml: &str, tag: &str) -> Option<String> {
+fn extract_xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
     let open = format!("<{tag}>");
     let close = format!("</{tag}>");
     let start = xml.find(&open)? + open.len();
     let end = start + xml[start..].find(&close)?;
-    Some(xml[start..end].trim().to_owned())
+    Some(xml[start..end].trim())
 }
