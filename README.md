@@ -4,6 +4,16 @@ The purpose of this program is to securely request DDNS updates over Route53. Th
 
 Dyndynser runs in two modes: Client Mode, and Server Mode.
 
+Clients have a domain they are responsible for, get their current IP, write a `ddns.json` file with the information, sign the json with the domain's private key, and then push the signed object to s3.
+
+Servers have the X509 certificates, which includes the CommonName and Public Key of the domain. They retrieve S3 objects, verify the signature of each item matches the key for the CommonName that they have certs for, and then updates Route53 with the successfully validated DNS requests.
+
+In this setup, clients have no privilges for Route53, and only minimal put-only priveliges for S3.
+
+The server is the only priveliged machine, having full S3 and Route 53 priveliges. 
+
+This minimizes compromise surface. Additionally because the requests are signed, machines can only sign for the domain they are responible for, and cannot issue rogue requests for domains they do not own.
+
 
 ````mermaid
 graph TD
@@ -12,6 +22,7 @@ graph TD
         .
         s3:PutObject"]:::iamRole
         iamServer["dyndns-server
+        .
         s3:GetObject
         s3:DeleteObject
         route53:ChangeResourceRecordSets"]:::iamRole
