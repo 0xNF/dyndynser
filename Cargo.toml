@@ -1,11 +1,24 @@
 [package]
 name = "dyndynser"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+rust-version = "1.90.0"
+
+description = "Distributed cryptographic DDNS over AWS' S3 and Route53"
+authors = ["Nick <0xnf@winetech.com>"]
+homepage = "https://github.com/0xNF/dyndynser"
+repository = "https://github.com/0xNF/dyndynser"
+documentation = "https://github.com/0xNF/dyndynser"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["s3", "route53", "ddns", "signed", "x509"]
+categories = ["command-line-utilities", "network-programming"]
+
+publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-chrono = "0.4.44"
+chrono = { version = "0.4.44", default-features = false, features = ["now"] }
 clap = { version = "4.6.1", features = ["derive", "env"] }
 const-oid = { version = "0.10.2", features = ["db"] }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core", "pkcs8", "pem"] }

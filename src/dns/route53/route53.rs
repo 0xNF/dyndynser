@@ -104,8 +104,10 @@ impl Route53Client {
         let body = build_change_xml(comment, changes);
         let url = format!("https://{HOST}{path}");
 
+        log::debug!("signing headers for route53 push");
         let headers = self.signed_headers("POST", &path, body.as_bytes())?;
 
+        log::info!("Sending Route53 request");
         let resp = self
             .client
             .post(&url)
@@ -114,6 +116,7 @@ impl Route53Client {
             .send()
             .context("sending ChangeResourceRecordSets request")?;
 
+        log::debug!("got response from Route53, code {}", &resp.status());
         let raw_xml =
             Self::check_response(resp).context("failed to deserialize route53 response")?;
 
