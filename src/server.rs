@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::Context;
-use clap::error;
 
 // We are dealing with keys, certificates, and small json files. We wil limit to at most 10kb
 const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
@@ -21,12 +20,12 @@ struct DynDynserServer<'a> {
 impl<'a> DynDynserServer<'a> {
     fn with_config(conf: &'a ConfigServer, s3_creds: &'a s3::creds::Credentials) -> Self {
         Self {
-            conf: conf,
+            conf,
             credentials: s3_creds,
         }
     }
 
-    fn fetch_ddns_jsons_from_s3<'unverified>(
+    fn fetch_ddns_jsons_from_s3(
         &self,
     ) -> Result<(Vec<SignedJSON<ResourceRecordSet>>, ServerErrors), anyhow::Error> {
         log::info!("Fetching s3 bucket items");
@@ -294,7 +293,7 @@ impl<'a> DynDynserServer<'a> {
             changes.push(dns_change);
         }
 
-        return changes;
+        changes
     }
 
     fn commit_changes(&self, changes: &[Change]) -> Result<ChangeInfo, anyhow::Error> {
@@ -305,7 +304,7 @@ impl<'a> DynDynserServer<'a> {
             .change_resource_record_sets(
                 &self.conf.hosted_dns_zone_id,
                 Some("Updated via dyndynser"),
-                &changes,
+                changes,
             )
             .context("failed to issue a Route53 update")?;
 
@@ -457,7 +456,6 @@ mod test {
     use std::str::FromStr;
 
     use crate::{
-        config::ConfigServer,
         dns::{self, ResourceRecordSet},
         keys::{load_ed25519_certificate_pem, read_file_limited},
         server::DynDynserServer,

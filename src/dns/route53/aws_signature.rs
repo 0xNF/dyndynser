@@ -20,6 +20,7 @@ fn sha256_hex(data: &[u8]) -> String {
 /// Compute all headers required for an AWS SigV4 request (including
 /// `Authorization`).  Returns a `BTreeMap` that must be forwarded verbatim
 /// to the HTTP client.
+#[allow(clippy::too_many_arguments)]
 pub fn aws_sigv4_headers(
     method: &str,
     host: &str,

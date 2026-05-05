@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
     about = "S3-backed dynamic DNS service with cryptographic record signing",
     long_about = None
 )]
+#[allow(clippy::upper_case_acronyms)]
 pub struct CLI {
     #[command(subcommand)]
     pub command: SubCommands,
