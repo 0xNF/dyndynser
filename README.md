@@ -4,6 +4,53 @@ The purpose of this program is to securely request DDNS updates over Route53. Th
 
 Dyndynser runs in two modes: Client Mode, and Server Mode.
 
+
+````mermaid
+graph TD
+    subgraph IAM["AWS IAM Roles"]
+        iamClient["dyndns-client
+        .
+        s3:PutObject"]:::iamRole
+        iamServer["dyndns-server
+        s3:GetObject
+        s3:DeleteObject
+        route53:ChangeResourceRecordSets"]:::iamRole
+    end
+
+    subgraph VPC
+        sub1["sub1.domain.example
+        client"]
+        sub2["sub2.domain.example
+        client"]
+        dns["dns-gateway
+        server"]
+    end
+
+    s3@{label: "S3 Bucket", shape: cylinder}
+    r53@{label: "Route 53", shape: doc}
+
+    classDef iamRole fill:#FFD700,stroke:#FF8C00,color:#000
+
+    iamClient -. assumed by .-> sub1
+    iamClient -. assumed by .-> sub2
+    iamServer -. assumed by .-> dns
+
+    sub1 -->|"cron dyndynser client
+    🔑
+    Write sub1.domain.example.ddns.json"| s3
+
+    sub2 -->|"cron dyndynser client
+    🔑
+    Write sub2.domain.example.ddns.json"| s3
+
+    dns <-->|"cron dyndynser server
+    ✅ Validate JSON
+    Read / Delete *.ddns.json"| s3
+
+    dns -->|"ChangeResourceRecordSets"| r53
+
+````
+
 # Requirements
 
 ## Buiding
