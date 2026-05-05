@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use chrono::TimeDelta;
+
 use crate::cli::{self, ServerArgs};
 
 #[derive(Debug)]
@@ -91,7 +93,7 @@ pub struct ConfigServer {
     // whether this run should make mutating changes or not
     pub is_dry_run: bool,
 
-    pub max_time_ago_signed_at: Duration,
+    pub max_time_ago_signed_at: TimeDelta,
 }
 
 impl ConfigServer {
@@ -103,8 +105,8 @@ impl ConfigServer {
         let region = args.aws_region.trim();
         let max_time_ago_signed_at = args
             .max_time_ago_signed_at_secs
-            .map_or(Duration::from_hours(1), |secs| {
-                Duration::from_secs(secs as u64)
+            .map_or(chrono::TimeDelta::hours(1), |secs| {
+                chrono::TimeDelta::seconds(secs as i64)
             });
 
         /* Check Empties */
