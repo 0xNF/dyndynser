@@ -78,9 +78,7 @@ pub fn load_ed25519_private_key(
         log::info!("Key was non-openssh signing key");
         load_ed25519_openssl_key(key_bytes)?
     } else {
-        Err(anyhow::anyhow!(
-            "Supplied signing key was not a valid supported format"
-        ))?
+        anyhow::bail!("Supplied signing key was not a valid supported format")
     };
 
     Ok(signing_key)
@@ -123,7 +121,7 @@ fn load_ed25519_openssh_private_key(
     Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
 }
 
-// Parses the given bytes as an OopenSSL Ed25199 formatted private key
+// Parses the given bytes as an OopenSSL ED25199 formatted private key
 fn load_ed25519_openssl_key(key_bytes: &[u8]) -> Result<ed25519_dalek::SigningKey, anyhow::Error> {
     let s: &str = std::str::from_utf8(key_bytes).context("not a valid utf8 string")?;
     ed25519_dalek::SigningKey::from_pkcs8_pem(s)
@@ -137,16 +135,19 @@ pub fn read_file_limited<P: AsRef<Path>>(
 ) -> Result<Vec<u8>, anyhow::Error> {
     let size = std::fs::metadata(&path)?.len();
 
+    /* Metadata check. This is not fail-safe, and so must be concretely checked further down. This is just an early escape. */
     if size > max_bytes {
-        return Err(anyhow::anyhow!(format!(
+        anyhow::bail!(
             "File too large: {} bytes (limit: {} bytes)",
-            size, max_bytes
-        )));
+            size,
+            max_bytes
+        );
     }
 
     let file = std::fs::File::open(path)?;
     let mut buffer = Vec::with_capacity(size as usize);
 
+    /* Actual size-check occurs here, in absolutely-read bytes */
     std::io::BufReader::new(file)
         .take(max_bytes)
         .read_to_end(&mut buffer)

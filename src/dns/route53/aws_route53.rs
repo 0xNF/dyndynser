@@ -144,7 +144,7 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
     x.push_str("  <ChangeBatch>\n");
 
     if let Some(c) = comment {
-        writeln!(x, "    <Comment>{}</Comment>\n", xml_escape(c)).unwrap();
+        writeln!(x, "    <Comment>{}</Comment>", xml_escape(c)).unwrap();
     }
 
     x.push_str("    <Changes>\n");
@@ -171,7 +171,7 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
             crate::dns::RecordData::AAAA(addrs) => {
                 for a in addrs {
                     x.push_str("            <ResourceRecord>\n");
-                    writeln!(x, "                    <Value>{a}</Value>").unwrap();
+                    writeln!(x, "                     <Value>{a}</Value>").unwrap();
                     x.push_str("            </ResourceRecord>\n");
                 }
             }

@@ -55,7 +55,7 @@ pub fn aws_sigv4_headers(
     }
 
     // Task 1: Canonical Request
-    log::debug!("Constructing the cannonical AWS request");
+    log::debug!("Constructing the canonical AWS request");
 
     // Each entry is "lowercase-name:trimmed-value\n".
     let canonical_headers: String = hdrs

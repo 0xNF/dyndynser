@@ -1,10 +1,7 @@
-use std::{borrow::Cow, time::Duration};
+use std::borrow::Cow;
 
 use anyhow::Context;
 use chrono::TimeDelta;
-
-// We are dealing with keys, certificates, and small json files. We wil limit to at most 10kb
-const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 
 use crate::{
     cli,
@@ -19,6 +16,7 @@ struct DynDynserServer<'a> {
     credentials: &'a s3::creds::Credentials,
 }
 
+#[derive(Debug)]
 struct DdnsResult {
     pub signed_payload: SignedPayload<ResourceRecordSet>,
     pub s3_key: String,
@@ -43,7 +41,7 @@ impl<'a> DynDynserServer<'a> {
             .parse()
             .context("invalid AWS region found during S3 write")?;
         let bucket = s3::Bucket::new(&self.conf.s3_bucket, region, self.credentials.clone())
-            .context("failed to rerieve s3 credentials")?;
+            .context("failed to retrieve s3 credentials")?;
 
         println!(
             "Querying Bucket: {}/{}",
@@ -79,10 +77,10 @@ impl<'a> DynDynserServer<'a> {
             for x in &list_result.contents {
                 /* Check key is an expected .ddns.json request file */
                 if !x.key.ends_with(dns::ResourceRecordSet::DDNS_JSON_FILE_EXT) {
-                    eprintln!(
+                    log::warn!(
                         "invalid s3 object key, not a ddns '{}' file: '{}'",
                         dns::ResourceRecordSet::DDNS_JSON_FILE_EXT,
-                        &x.key
+                        &x.key,
                     );
                     continue;
                 }
@@ -114,7 +112,7 @@ impl<'a> DynDynserServer<'a> {
                                 errors.failed_json_parses.push((
                                     x.key.to_owned(),
                                     anyhow::Error::from(e)
-                                        .context("failed to derialize into a DdnsJson object"),
+                                        .context("failed to deserialize into a DdnsJson object"),
                                 ));
                             }
                         }
@@ -281,11 +279,11 @@ impl<'a> DynDynserServer<'a> {
         let max_age = now + max_time_ago + tolerance;
         let time_diff = max_age - signed_at;
         if (now + max_time_ago + tolerance) > now {
-            return Err(anyhow::anyhow!(
+            anyhow::bail!(
                 "Signature is too old (age: {}s, max: {}s)",
                 time_diff,
                 max_time_ago
-            ));
+            );
         }
         Ok(())
     }
@@ -420,9 +418,7 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
 
     /* trigger a ddns request automatically via a Process Command */
 
-    errors.print_summary();
-
-    Ok(())
+    errors.print_summary()
 }
 
 struct ServerErrors {
@@ -449,7 +445,7 @@ impl ServerErrors {
             || !self.failed_signature_checks.is_empty()
     }
 
-    fn print_summary(&self) {
+    fn print_summary(&self) -> Result<(), anyhow::Error> {
         println!("Errors Summary\n-------");
         if self.has_errors() {
             if !self.failed_s3_fetches.is_empty() {
@@ -476,8 +472,12 @@ impl ServerErrors {
                     println!("\t *{}: {:#?}", fail.0, fail.1);
                 }
             }
+            Err(anyhow::anyhow!(
+                "errors occurred while executing this dyndynser run"
+            ))
         } else {
             println!("No errors");
+            Ok(())
         }
     }
 }

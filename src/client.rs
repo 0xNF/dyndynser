@@ -2,15 +2,14 @@ use std::str::FromStr;
 
 use anyhow::Context;
 
-use ed25519_dalek::Signer;
 use reqwest::{self, StatusCode};
 
 use crate::cli;
+use crate::config;
 use crate::config::ConfigClient;
 use crate::dns;
 use crate::keys;
 use crate::signatures;
-use crate::signatures::SignableEnvelope;
 
 pub struct DynDynserClient<'a> {
     conf: &'a ConfigClient,
@@ -22,18 +21,18 @@ impl<'a> DynDynserClient<'a> {
         Self { conf }
     }
 
-    // Queries a cannonical Amazon AWS url for the IP of the machine running this binary
+    // Queries a canonical Amazon AWS url for the IP of the machine running this binary
     fn query_for_ip(&self) -> Result<std::net::IpAddr, anyhow::Error> {
         let res = reqwest::blocking::get(&self.conf.ip_addr_check_url)
             .context("failed to check IP address")?;
         if res.status() != StatusCode::OK {
             log::error!("IP Query returned non-200 err code: {}", res.status());
-            return Err(anyhow::anyhow!("IP query returned non-200 status"));
+            anyhow::bail!("IP query returned non-200 status");
         }
 
         let res = res
             .bytes()
-            .context("could not read IP requets body bytes")?;
+            .context("could not read IP request body bytes")?;
 
         log::debug!("got ip query result");
 
@@ -68,7 +67,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     /* Create and sign the DDNS struct json */
     let dns_obj = &dns::ResourceRecordSet {
         ttl: conf.ttl.map_or(300, |d| d.as_secs() as u32),
-        name: conf.domain,
+        name: (*conf.domain).to_owned(),
         data: match ip {
             std::net::IpAddr::V4(ipv4_addr) => dns::RecordData::A(vec![ipv4_addr]),
             std::net::IpAddr::V6(ipv6_addr) => dns::RecordData::AAAA(vec![ipv6_addr]),
@@ -76,8 +75,8 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     };
 
     /* Find and load the keyfile bytes */
-    let key_bytes =
-        keys::read_file_limited(conf.key_path, 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+    let key_bytes = keys::read_file_limited(conf.key_path, config::FILE_SIZE_MAX_BYTES)
+        .context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
     let signing_key =
         keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
 
@@ -116,7 +115,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
             .put_object_with_content_type(&ddns_json_path, &signed_json_bytes, "application/json")
             .context("failed to put S3 object")?;
         if s3_response.status_code() != 200 {
-            Err(anyhow::anyhow!("s3 returned non-200"))?;
+            anyhow::bail!("s3 returned non-200")
         }
         log::info!("Successfully uploaded S3 ddns json: {}", s3_response);
 

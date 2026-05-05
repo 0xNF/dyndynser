@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -16,7 +14,7 @@ pub struct CLI {
 
 #[derive(Subcommand)]
 pub enum SubCommands {
-    /// Run in server mode, processing and validating DDNS update equests stored in S3.
+    /// Run in server mode, processing and validating DDNS update requests stored in S3.
     /// The server verifies cryptographic signatures on each request against a set of trusted public keys before applying
     /// any DNS record changes.
     Server(ServerArgs),
@@ -30,7 +28,7 @@ pub enum SubCommands {
 pub struct ServerArgs {
     #[arg(
         long = "dry-run",
-        help = "Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything ti Route53. Will print what would otherwise be updated."
+        help = "Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything to Route53. Will print what would otherwise be updated."
     )]
     pub is_dry_run: bool,
 
