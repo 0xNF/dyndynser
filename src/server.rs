@@ -297,9 +297,9 @@ impl<'a> DynDynserServer<'a> {
     }
 
     fn commit_changes(&self, changes: &[Change]) -> Result<ChangeInfo, anyhow::Error> {
-        let cloned_creds = &self.credentials.clone();
-        let route53_client = route53::aws_route53::Route53Client::from_s3_credentials(cloned_creds)
-            .context("failed to construct a Route53 Client")?;
+        let route53_client =
+            route53::aws_route53::Route53Client::from_s3_credentials(self.credentials)
+                .context("failed to construct a Route53 Client")?;
         let change_results = route53_client
             .change_resource_record_sets(
                 &self.conf.hosted_dns_zone_id,

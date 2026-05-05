@@ -15,7 +15,6 @@ pub struct Route53Client<'a> {
     access_key: &'a str,
     secret_key: &'a str,
     session_token: Option<&'a str>,
-    /// Connection pool shared across all requests on this client instance.
     client: reqwest::blocking::Client,
 }
 
@@ -91,14 +90,17 @@ impl<'a> Route53Client<'a> {
 
     /// Submit a batch of DNS record-set changes.
     ///
-    /// `hosted_zone_id` accepts `"Z1234567890ABC"` or `"/hostedzone/Z1234567890ABC"`.
+    /// `hosted_zone_id` accepts `"Z1234567890ABC"` or `"/hostedzone/Z1234567890ABC"`, or `"hostedzone/Z1234567890ABC"`.
     pub fn change_resource_record_sets(
         &self,
         hosted_zone_id: &str,
         comment: Option<&str>,
         changes: &[Change],
     ) -> Result<ChangeInfo, anyhow::Error> {
-        let zone = hosted_zone_id.trim_start_matches("/hostedzone/").trim();
+        let zone = hosted_zone_id
+            .trim_start_matches("/hostedzone/")
+            .trim_start_matches("hostedzone/")
+            .trim();
         let path = format!("/2013-04-01/hostedzone/{zone}/rrset/");
         let body = build_change_xml(comment, changes);
         let url = format!("https://{HOST}{path}");
@@ -142,22 +144,13 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
     x.push_str("  <ChangeBatch>\n");
 
     if let Some(c) = comment {
-        x.push_str(&format!("    <Comment>{}</Comment>\n", xml_escape(c)));
+        writeln!(x, "    <Comment>{}</Comment>\n", xml_escape(c)).unwrap();
     }
 
     x.push_str("    <Changes>\n");
 
     for change in changes {
         let rrs = &change.record_set;
-
-        // Flatten the typed addresses into strings once.  The match also
-        // serves as a compile-time guarantee that A ↔ IPv4 and AAAA ↔ IPv6.
-        // IP address Display impls never emit XML-special characters, so no
-        // escaping is needed.
-        let values: Vec<String> = match &rrs.data {
-            crate::dns::RecordData::A(addrs) => addrs.iter().map(|a| a.to_string()).collect(),
-            crate::dns::RecordData::AAAA(addrs) => addrs.iter().map(|a| a.to_string()).collect(),
-        };
 
         x.push_str("      <Change>\n");
         writeln!(x, "        <Action>{}</Action>", change.action).unwrap();
@@ -167,11 +160,22 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
         writeln!(x, "          <TTL>{}</TTL>", rrs.ttl).unwrap();
         x.push_str("          <ResourceRecords>\n");
 
-        for v in &values {
-            x.push_str("            <ResourceRecord>\n");
-            writeln!(x, "              <Value>{}</Value>", xml_escape(v)).unwrap();
-            x.push_str("            </ResourceRecord>\n");
-        }
+        match &rrs.data {
+            crate::dns::RecordData::A(addrs) => {
+                for a in addrs {
+                    x.push_str("            <ResourceRecord>\n");
+                    writeln!(x, "                     <Value>{a}</Value>").unwrap();
+                    x.push_str("            </ResourceRecord>\n");
+                }
+            }
+            crate::dns::RecordData::AAAA(addrs) => {
+                for a in addrs {
+                    x.push_str("            <ResourceRecord>\n");
+                    writeln!(x, "                    <Value>{a}</Value>").unwrap();
+                    x.push_str("            </ResourceRecord>\n");
+                }
+            }
+        };
 
         x.push_str("          </ResourceRecords>\n");
         x.push_str("        </ResourceRecordSet>\n");
