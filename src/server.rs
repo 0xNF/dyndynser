@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use anyhow::Context;
 use chrono::TimeDelta;
@@ -12,6 +12,27 @@ use crate::{
     signatures::{self, SignedPayload},
 };
 
+#[derive(Debug, Clone)]
+struct S3Key(String);
+
+impl From<&str> for S3Key {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for S3Key {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl Display for S3Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 struct DynDynserServer<'a> {
     conf: &'a ConfigServer,
     credentials: &'a s3::creds::Credentials,
@@ -23,7 +44,7 @@ struct DynDynserServer<'a> {
 #[derive(Debug)]
 struct UnverifiedDdnsRequest {
     pub signed_payload: SignedPayload<ResourceRecordSet>,
-    pub s3_key: String,
+    pub s3_key: S3Key,
 }
 
 impl UnverifiedDdnsRequest {
@@ -73,7 +94,7 @@ impl UnverifiedDdnsRequest {
 /// and can thus be taken as confirmed safe.
 struct VerifiedDdnsRequest<'a> {
     pub resource_record: &'a ResourceRecordSet,
-    pub s3_key: &'a str,
+    pub s3_key: &'a S3Key,
 }
 
 impl<'a> DynDynserServer<'a> {
@@ -165,7 +186,7 @@ impl<'a> DynDynserServer<'a> {
                                 );
                                 unverified_requests.push(UnverifiedDdnsRequest {
                                     signed_payload: ddnsjson,
-                                    s3_key: x.key.clone(),
+                                    s3_key: S3Key(x.key.clone()),
                                 });
                             }
                             Err(e) => {
@@ -176,7 +197,7 @@ impl<'a> DynDynserServer<'a> {
                                     e,
                                 );
                                 errors.failed_json_parses.push((
-                                    x.key.to_owned(),
+                                    S3Key(x.key.clone()),
                                     anyhow::Error::from(e)
                                         .context("failed to deserialize into a DdnsJson object"),
                                 ));
@@ -185,9 +206,8 @@ impl<'a> DynDynserServer<'a> {
                     }
                     Err(e) => {
                         errors.failed_s3_fetches.push((
-                            x.key.to_owned(),
-                            anyhow::Error::from(e)
-                                .context(format!("failed to Get S3 Object for key {}", &x.key)),
+                            x.key.clone().into(),
+                            anyhow::Error::from(e).context(format!("failed to Get S3 Object")),
                         ));
                     }
                 }
@@ -212,6 +232,7 @@ impl<'a> DynDynserServer<'a> {
         // results: &mut RunResults,
     ) -> Result<Vec<CertMatch>, anyhow::Error> {
         let mut v: Vec<CertMatch> = Vec::new();
+
         /* for each key, accumulate errors. don't fail all just because one key is bad
          * * use the Domain portion to find the corresponding public key
          * * check signature is valid
@@ -270,6 +291,7 @@ impl<'a> DynDynserServer<'a> {
     ) -> Vec<VerifiedDdnsRequest<'a>> {
         let mut verified_requests: Vec<VerifiedDdnsRequest<'a>> =
             Vec::with_capacity(unverified_ddns_requests.len());
+
         /* Validate each request by finding a corresponding Public Key */
         for unverified_request in unverified_ddns_requests.iter() {
             log::info!(
@@ -406,30 +428,29 @@ impl<'a> DynDynserServer<'a> {
     }
 
     /// Deletes the given s3_keys from the configured s3 bucket
-    fn cleanup<I, S>(&self, s3_keys: I, errors: &mut ServerErrors) -> Result<(), anyhow::Error>
-    where
-        I: Iterator<Item = S>,
-        S: AsRef<str>,
-    {
+    fn cleanup<'b>(
+        &self,
+        s3_keys: Vec<S3Key>,
+        errors: &mut ServerErrors,
+    ) -> Result<(), anyhow::Error> {
         let bucket = self.get_s3_bucket().context("failed to get S3 bucket")?;
 
         for s3_key in s3_keys {
             match bucket
-                .delete_object(&s3_key)
+                .delete_object(&s3_key.0)
                 .context("failed to delete S3 Key")
             {
                 Ok(res) => {
-                    if res.status_code() != 200 {
+                    if res.status_code() < 200 || res.status_code() >= 300 {
+                        println!("Failed to S3 bucket item {}", &s3_key);
+
                         errors.failed_s3_deletions.push((
-                            s3_key.as_ref().to_string(),
+                            s3_key,
                             anyhow::anyhow!("got non-200 status code: {}", res.status_code()),
                         ));
-                        println!("Deleted S3 bucket item {}", s3_key.as_ref());
                     }
                 }
-                Err(e) => errors
-                    .failed_s3_deletions
-                    .push((s3_key.as_ref().to_string(), e)),
+                Err(e) => errors.failed_s3_deletions.push((s3_key, e)),
             }
         }
 
@@ -450,6 +471,8 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
         println!("Performing a server Dry Run");
         log::info!("Doing a dry run, will not actually update the ddns file");
     }
+
+    let cleanup_keys: Vec<&S3Key> = Vec::new();
 
     /* Step 1: Fetch Unverified Requests */
 
@@ -495,6 +518,23 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
     /* Step 3: Build the DNS Changes */
     let changes = DynDynserServer::build_changes(&verified_ddns_requests);
 
+    let delete_keys: Vec<S3Key> = verified_ddns_requests
+        .iter()
+        .map(|v| v.s3_key.to_owned().clone())
+        .chain(
+            errors
+                .failed_s3_fetches
+                .iter()
+                .map(|e| e.0.to_owned().clone()),
+        )
+        .chain(
+            errors
+                .failed_json_parses
+                .iter()
+                .map(|e| e.0.to_owned().clone()),
+        )
+        .collect();
+
     if conf.is_dry_run {
         println!(
             "Will write these changes to the DNS records:\n\n```json\n{:?}\n```",
@@ -502,10 +542,7 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
         );
         println!(
             "Will delete the following keys from the s3 bucket:\n{:?}",
-            unverified_ddns_requests
-                .iter()
-                .map(|x| &x.s3_key)
-                .collect::<Vec<_>>(),
+            delete_keys,
         );
         return Ok(());
     }
@@ -521,8 +558,9 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
     );
 
     log::info!("Claning up used and invalid ddns request keys");
+
     dyndynser
-        .cleanup(verified_ddns_requests.iter().map(|v| v.s3_key), &mut errors)
+        .cleanup(delete_keys, &mut errors)
         .context("failed to cleanup s3 ddns.json items")?;
 
     /* trigger a ddns request automatically via a Process Command */
@@ -532,11 +570,11 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
 
 /// Holds non-blocking errors encountered during the Server process, so that the process updates what it can update, and doesn't self-DOS in the case of bad or outdated data
 struct ServerErrors {
-    failed_s3_fetches: Vec<(String, anyhow::Error)>,
-    failed_json_parses: Vec<(String, anyhow::Error)>,
+    failed_s3_fetches: Vec<(S3Key, anyhow::Error)>,
+    failed_json_parses: Vec<(S3Key, anyhow::Error)>,
     failed_key_parses: Vec<(String, anyhow::Error)>,
     failed_signature_checks: Vec<(String, anyhow::Error)>,
-    failed_s3_deletions: Vec<(String, anyhow::Error)>,
+    failed_s3_deletions: Vec<(S3Key, anyhow::Error)>,
 }
 
 impl ServerErrors {
