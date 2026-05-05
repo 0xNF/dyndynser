@@ -160,16 +160,16 @@ fn build_change_xml(comment: Option<&str>, changes: &[Change]) -> String {
         };
 
         x.push_str("      <Change>\n");
-        let _ = write!(x, "        <Action>{}</Action>\n", change.action).unwrap();
+        writeln!(x, "        <Action>{}</Action>", change.action).unwrap();
         x.push_str("        <ResourceRecordSet>\n");
-        let _ = write!(x, "          <Name>{}</Name>\n", xml_escape(&rrs.name)).unwrap();
-        let _ = write!(x, "          <Type>{}</Type>\n", rrs.data.record_type()).unwrap();
-        let _ = write!(x, "          <TTL>{}</TTL>\n", rrs.ttl).unwrap();
+        writeln!(x, "          <Name>{}</Name>", xml_escape(&rrs.name)).unwrap();
+        writeln!(x, "          <Type>{}</Type>", rrs.data.record_type()).unwrap();
+        writeln!(x, "          <TTL>{}</TTL>", rrs.ttl).unwrap();
         x.push_str("          <ResourceRecords>\n");
 
         for v in &values {
             x.push_str("            <ResourceRecord>\n");
-            write!(x, "              <Value>{}</Value>\n", xml_escape(v)).unwrap();
+            writeln!(x, "              <Value>{}</Value>", xml_escape(v)).unwrap();
             x.push_str("            </ResourceRecord>\n");
         }
 

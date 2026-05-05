@@ -90,7 +90,7 @@ fn check_valid_ddns_request(
             serde_json::to_string_pretty(&signed_json.payload)
                 .context("failed to re-serialize during signature check")?
                 .as_bytes(),
-            &signed_json.signature.inner(),
+            signed_json.signature.inner(),
         )
         .context("ddns json signature did not match")?;
 
@@ -153,7 +153,7 @@ pub fn handle_server(
             "Checking signature of '{}' ddns request",
             &signed_json.payload.name
         );
-        match check_valid_ddns_request(&signed_json, &domain_certs)
+        match check_valid_ddns_request(signed_json, &domain_certs)
             .context("failed to check signing key request")
         {
             Ok(_) => {
@@ -168,7 +168,7 @@ pub fn handle_server(
                 );
                 results.failed_signature_checks.push((
                     &signed_json.payload.name,
-                    anyhow::Error::from(e).context("signature did not pass validation"),
+                    e.context("signature did not pass validation"),
                 ));
             }
         }
@@ -215,7 +215,7 @@ pub fn handle_server(
         return Ok(());
     }
 
-    let route53_client = route53::route53::Route53Client::from_s3_credentials(&credentials)
+    let route53_client = route53::aws_route53::Route53Client::from_s3_credentials(&credentials)
         .context("failed to construct a Route53 Client")?;
     let change_results = route53_client
         .change_resource_record_sets(

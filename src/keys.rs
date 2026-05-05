@@ -19,7 +19,7 @@ pub struct CertMatch {
 // Parses the given bytes as an X.509 Certificate PEM file and extracts the CommonName / Public Key from it
 pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyhow::Error> {
     let cert_bytes = cert_bytes.trim_ascii();
-    let cert = Certificate::from_pem(&cert_bytes)
+    let cert = Certificate::from_pem(cert_bytes)
         .context("Could not parse into an x509 PEM certificate")?;
 
     let subject_public_key = &cert.tbs_certificate.subject_public_key_info;

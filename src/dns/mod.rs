@@ -10,6 +10,7 @@ pub mod route53;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RecordType {
     A,
+    #[allow(clippy::upper_case_acronyms)]
     AAAA,
 }
 
