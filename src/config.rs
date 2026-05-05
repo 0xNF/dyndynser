@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use anyhow::Context;
 
-use crate::keys;
+use crate::{
+    cli::{self, ServerArgs},
+    keys,
+};
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -34,24 +37,17 @@ pub struct ConfigClient {
 impl ConfigClient {
     const DEFAULT_IP_CHECK_URL: &str = "https://checkip.amazonaws.com";
 
-    pub fn parse(
-        is_dry_run: bool,
-        s3_bucket: &str,
-        ddns_json_dir: &str,
-        domain: &str,
-        ttl_seconds: Option<u32>,
-        key_path: &str,
-        signing_key_password: Option<&str>,
-        region: &str,
-        ip_addr_check_url: Option<&str>,
-    ) -> Result<Self, anyhow::Error> {
-        let s3_bucket = s3_bucket.trim();
-        let domain = domain.trim();
-        let key_path = key_path.trim();
-        let region = region.trim();
-        let ddns_json_dir = ddns_json_dir.trim();
-        let ttl: Option<Duration> = ttl_seconds.map(|t| Duration::from_secs(t as u64));
-        let ip_addr_check_url = ip_addr_check_url.unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
+    pub fn parse(args: &cli::ClientArgs) -> Result<Self, anyhow::Error> {
+        let s3_bucket = args.s3_bucket.trim();
+        let domain = args.domain.trim();
+        let key_path = args.key_path.trim();
+        let region = args.aws_region.trim();
+        let ddns_json_dir = args.s3_ddns_json_dir.trim();
+        let ttl: Option<Duration> = args.ttl.map(|t| Duration::from_secs(t as u64));
+        let ip_addr_check_url = args
+            .ip_addr_check_url
+            .as_deref()
+            .unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
 
         /* Check Empties */
         if s3_bucket.is_empty() {
@@ -70,10 +66,11 @@ impl ConfigClient {
 
         /* Find and load the keyfile bytes */
         let key_bytes = keys::read_file_limited(key_path, 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
-        let signing_key = keys::load_ed25519_private_key(&key_bytes, signing_key_password)?;
+        let signing_key =
+            keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
 
         Ok(ConfigClient {
-            is_dry_run,
+            is_dry_run: args.is_dry_run,
             domain: domain.to_lowercase(),
             ttl,
             signing_key,
@@ -107,21 +104,12 @@ pub struct ConfigServer {
 }
 
 impl ConfigServer {
-    pub fn parse(
-        is_dry_run: bool,
-
-        s3_bucket: &str,
-        ddns_json_dir: &str,
-        hosted_dns_zone_id: &str,
-
-        keys_search_path: &str,
-        region: &str,
-    ) -> Result<Self, anyhow::Error> {
-        let s3_bucket = s3_bucket.trim();
-        let ddns_json_dir = ddns_json_dir.trim();
-        let hosted_dns_zone_id = hosted_dns_zone_id.trim();
-        let keys_search_path = keys_search_path.trim();
-        let region = region.trim();
+    pub fn parse(args: &ServerArgs) -> Result<Self, anyhow::Error> {
+        let s3_bucket = args.s3_bucket.trim();
+        let ddns_json_dir = args.s3_ddns_json_dir.trim();
+        let hosted_dns_zone_id = args.hosted_dns_zone_id.trim();
+        let keys_search_path = args.keys_search_path.trim();
+        let region = args.aws_region.trim();
 
         /* Check Empties */
         if s3_bucket.is_empty() {
@@ -137,7 +125,7 @@ impl ConfigServer {
         }
 
         Ok(ConfigServer {
-            is_dry_run,
+            is_dry_run: args.is_dry_run,
             hosted_dns_zone_id: hosted_dns_zone_id.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
             s3_bucket: s3_bucket.to_owned(),

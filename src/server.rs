@@ -6,6 +6,7 @@ use anyhow::Context;
 const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 
 use crate::{
+    cli,
     config::*,
     dns::{self, Change, route53},
     keys::{self, CertMatch},
@@ -97,23 +98,8 @@ fn check_valid_ddns_request(
     Ok(())
 }
 
-pub fn handle_server(
-    is_dry_run: bool,
-    s3_bucket: &str,
-    s3_ddns_json_dir: &str,
-    hosted_dns_zone_id: &str,
-    keys_search_path: &str,
-    region: &str,
-) -> Result<(), anyhow::Error> {
-    let conf = ConfigServer::parse(
-        is_dry_run,
-        s3_bucket,
-        s3_ddns_json_dir,
-        hosted_dns_zone_id,
-        keys_search_path,
-        region,
-    )
-    .context("failed to parse server config")?;
+pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error> {
+    let conf = ConfigServer::parse(server_args).context("failed to parse server config")?;
 
     if conf.is_dry_run {
         println!("Performing a server Dry Run");

@@ -5,6 +5,7 @@ use anyhow::Context;
 use ed25519_dalek::Signer;
 use reqwest::{self, StatusCode};
 
+use crate::cli;
 use crate::config::ConfigClient;
 use crate::dns;
 use crate::signatures;
@@ -69,30 +70,9 @@ impl<'a> DynDynserClient<'a> {
 }
 
 // In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
-pub fn handle_client(
-    is_dry_run: bool,
-    s3_bucket: &str,
-    s3_ddns_json_dir: &str,
-    domain: &str,
-    ttl: Option<u32>,
-    key_path: &str,
-    signing_key_password: Option<&str>,
-    region: &str,
-    ip_addr_check_url: Option<&str>,
-) -> Result<(), anyhow::Error> {
+pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     log::info!("parsing Client Config");
-    let conf = ConfigClient::parse(
-        is_dry_run,
-        s3_bucket,
-        s3_ddns_json_dir,
-        domain,
-        ttl,
-        key_path,
-        signing_key_password,
-        region,
-        ip_addr_check_url,
-    )
-    .context("failed to parse Client config")?;
+    let conf = ConfigClient::parse(args).context("failed to parse Client config")?;
 
     let dyndynser = DynDynserClient::with_config(&conf);
 
@@ -129,7 +109,7 @@ pub fn handle_client(
     if conf.is_dry_run {
         println!(
             "Will write to: s3://{}{}\nJSON:\n{}",
-            s3_bucket,
+            conf.s3_bucket,
             ddns_json_path,
             String::from_utf8_lossy(&signed_json_bytes)
         );
