@@ -1,10 +1,13 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::{
+    fmt,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 use serde::{Deserialize, Serialize};
 
 pub mod route53;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum RecordType {
     A,
     AAAA,
@@ -61,11 +64,40 @@ pub struct ResourceRecordSet {
     /// Fully-qualified DNS name, e.g. `"api.example.com."` (trailing dot optional).
     pub name: String,
     /// TTL in seconds.
-    pub ttl: u64,
+    pub ttl: u32,
     /// Addresses for this record set.  The variant encodes the record type,
     /// so `A` records can only hold [`Ipv4Addr`] values and `AAAA` records
     /// can only hold [`Ipv6Addr`] values.
     pub data: RecordData,
+}
+
+impl fmt::Display for RecordData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::A(addrs) => {
+                write!(f, "A")?;
+                for addr in addrs {
+                    write!(f, " {addr}")?;
+                }
+                Ok(())
+            }
+            Self::AAAA(addrs) => {
+                write!(f, "AAAA")?;
+                for addr in addrs {
+                    write!(f, " {addr}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ResourceRecordSet {
+    pub const DDNS_JSON_FILE_EXT: &str = ".ddns.json";
+
+    pub fn make_filename(&self) -> String {
+        format!("{}{}", &self.name, ResourceRecordSet::DDNS_JSON_FILE_EXT)
+    }
 }
 
 /// A single change within a batch.
@@ -82,6 +114,4 @@ pub struct ChangeInfo {
     pub id: String,
     /// `"PENDING"` immediately after submission; `"INSYNC"` once propagated.
     pub status: String,
-    /// Full raw XML (handy for diagnostics).
-    pub raw_xml: String,
 }

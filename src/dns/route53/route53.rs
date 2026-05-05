@@ -114,7 +114,8 @@ impl Route53Client {
             .send()
             .context("sending ChangeResourceRecordSets request")?;
 
-        let raw_xml = Self::check_response(resp)?;
+        let raw_xml =
+            Self::check_response(resp).context("failed to deserialize route53 response")?;
 
         Ok(ChangeInfo {
             id: extract_xml_text(&raw_xml, "Id")
@@ -122,7 +123,6 @@ impl Route53Client {
                 .trim_start_matches("/change/")
                 .to_owned(),
             status: extract_xml_text(&raw_xml, "Status").unwrap_or_default(),
-            raw_xml,
         })
     }
 }

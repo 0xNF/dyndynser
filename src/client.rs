@@ -6,7 +6,7 @@ use ed25519_dalek::Signer;
 use reqwest::{self, StatusCode};
 
 use crate::config::ConfigClient;
-use crate::ddns;
+use crate::dns;
 use crate::signatures;
 
 pub struct DynDynserClient<'a> {
@@ -109,21 +109,23 @@ pub fn handle_client(
         .context("failed to get IP address of this machine")?;
 
     /* Create and sign the DDNS struct json */
-    let ddns_obj = ddns::DdnsJSON {
-        domain: conf.domain,
-        ip: ip,
-        ttl: conf.ttl.map(|d| d.as_secs() as u32),
+    let dns_obj = dns::ResourceRecordSet {
+        ttl: conf.ttl.map_or(300, |d| d.as_secs() as u32),
+        name: conf.domain,
+        data: match ip {
+            std::net::IpAddr::V4(ipv4_addr) => dns::RecordData::A(vec![ipv4_addr]),
+            std::net::IpAddr::V6(ipv6_addr) => dns::RecordData::AAAA(vec![ipv6_addr]),
+        },
     };
 
-    let signed_json_bytes = DynDynserClient::sign_object(&conf.signing_key, &ddns_obj)
+    let signed_json_bytes = DynDynserClient::sign_object(&conf.signing_key, &dns_obj)
         .context("Failed to sign payload object")?;
 
     /* Send to S3 */
-    log::info!("Shelling out to invoke into S3");
     let ddns_json_path = format!(
         "{}/{}",
         conf.s3_bucket_ddns_json_directory,
-        ddns_obj.make_filename()
+        dns_obj.make_filename()
     );
 
     if conf.is_dry_run {
@@ -134,6 +136,8 @@ pub fn handle_client(
             String::from_utf8_lossy(&signed_json_bytes)
         );
     } else {
+        log::info!("Invoking S3 for file upload");
+
         let region = conf
             .region
             .parse()
@@ -152,7 +156,7 @@ pub fn handle_client(
 
         println!(
             "Successfully wrote domain request for '{}' to s3 bucket.\nFile key: {}",
-            &ddns_obj.domain, ddns_json_path,
+            &dns_obj.name, ddns_json_path,
         );
     }
     Ok(())

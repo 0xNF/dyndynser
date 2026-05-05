@@ -7,8 +7,7 @@ const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 
 use crate::{
     config::*,
-    ddns::{self, DdnsJSON},
-    dns::{Change, route53},
+    dns::{self, Change, route53},
     keys::{self, CertMatch},
     signatures::{self, SignedJSON},
 };
@@ -67,21 +66,21 @@ fn get_public_key_map<'cert>(
 }
 
 fn check_valid_ddns_request(
-    signed_json: &SignedJSON<DdnsJSON>,
+    signed_json: &SignedJSON<dns::ResourceRecordSet>,
     domain_key_map: &Vec<CertMatch>,
 ) -> Result<(), anyhow::Error> {
     /* Look for Matching Key of domain */
     log::info!(
         "looking for key that matches '{}'",
-        &signed_json.payload.domain
+        &signed_json.payload.name
     );
     let vk = domain_key_map
         .iter()
-        .find(|x| x.common_name == signed_json.payload.domain)
+        .find(|x| x.common_name == signed_json.payload.name)
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "Received ddns request for domain '{}', but no matching key could be found",
-                &signed_json.payload.domain,
+                &signed_json.payload.name,
             )
         })?;
 
@@ -133,7 +132,7 @@ pub fn handle_server(
     }
     println!("Found {} .ddns.json files", results.unverified_jsons.len());
     results.unverified_jsons.iter().for_each(|unverified| {
-        println!("\t * {}", &unverified.payload.domain);
+        println!("\t * {}", &unverified.payload.name);
     });
 
     /* Get Keys */
@@ -152,23 +151,23 @@ pub fn handle_server(
     for signed_json in results.unverified_jsons.iter() {
         log::info!(
             "Checking signature of '{}' ddns request",
-            &signed_json.payload.domain
+            &signed_json.payload.name
         );
         match check_valid_ddns_request(&signed_json, &domain_certs)
             .context("failed to check signing key request")
         {
             Ok(_) => {
-                log::info!("Validated '{}' domain request", &signed_json.payload.domain);
+                log::info!("Validated '{}' domain request", &signed_json.payload.name);
                 results.verified_jsons.push(&signed_json.payload);
             }
             Err(e) => {
                 log::error!(
                     "Could not validate '{}' request: {:?}",
-                    &signed_json.payload.domain,
+                    &signed_json.payload.name,
                     e,
                 );
                 results.failed_signature_checks.push((
-                    &signed_json.payload.domain,
+                    &signed_json.payload.name,
                     anyhow::Error::from(e).context("signature did not pass validation"),
                 ));
             }
@@ -179,29 +178,30 @@ pub fn handle_server(
     for verified_request in results.verified_jsons.iter() {
         log::debug!(
             "processing validated request for '{}'",
-            &verified_request.domain
+            &verified_request.name
         );
 
-        let with_traiing_dot = if verified_request.domain.ends_with('.') {
-            Cow::Borrowed(&verified_request.domain)
-        } else {
-            log::debug!("domain didn't end with '.', adding one ourselves");
-            let mut owned = verified_request.domain.to_owned();
-            owned.push('.');
-            Cow::Owned(owned)
+        /* if we're working on Domains (i.e. CNAME, A, AAAA, etc), add the trialing dot for FQDN */
+        let record_type = &verified_request.data.record_type();
+        let fixed_name = match record_type {
+            dns::RecordType::A | dns::RecordType::AAAA => {
+                if verified_request.name.ends_with('.') {
+                    Cow::Borrowed(&verified_request.name)
+                } else {
+                    log::debug!("domain didn't end with '.', adding one ourselves");
+                    let mut owned = verified_request.name.to_owned();
+                    owned.push('.');
+                    Cow::Owned(owned)
+                }
+            }
         };
 
         let dns_change = Change {
             action: crate::dns::ChangeAction::Upsert,
             record_set: crate::dns::ResourceRecordSet {
-                name: with_traiing_dot.to_string(),
-                data: match verified_request.ip {
-                    std::net::IpAddr::V4(ipv4_addr) => crate::dns::RecordData::A(vec![ipv4_addr]),
-                    std::net::IpAddr::V6(ipv6_addr) => {
-                        crate::dns::RecordData::AAAA(vec![ipv6_addr])
-                    }
-                },
-                ttl: 300 as u64,
+                name: fixed_name.to_string(),
+                data: verified_request.data.clone(),
+                ttl: verified_request.ttl,
             },
         };
         changes.push(dns_change);
@@ -286,10 +286,10 @@ fn fetch_ddns_jsons_from_s3<'unverified>(
 
         for x in &list_result.contents {
             /* Check key is an expected .ddns.json request file */
-            if !x.key.ends_with(ddns::DdnsJSON::DDNS_JSON_FILE_EXT) {
+            if !x.key.ends_with(dns::ResourceRecordSet::DDNS_JSON_FILE_EXT) {
                 eprintln!(
                     "invalid s3 object key, not a ddns '{}' file: '{}'",
-                    ddns::DdnsJSON::DDNS_JSON_FILE_EXT,
+                    dns::ResourceRecordSet::DDNS_JSON_FILE_EXT,
                     &x.key
                 );
                 continue;
@@ -298,12 +298,14 @@ fn fetch_ddns_jsons_from_s3<'unverified>(
             /* Try to deserde into a ddnsjson object */
             match bucket.get_object(&x.key) {
                 Ok(response_data) => {
-                    match serde_json::from_slice::<SignedJSON<DdnsJSON>>(response_data.as_slice()) {
+                    match serde_json::from_slice::<SignedJSON<dns::ResourceRecordSet>>(
+                        response_data.as_slice(),
+                    ) {
                         Ok(ddnsjson) => {
                             log::debug!(
                                 "successfully deserde'd key '{}' into a {} object",
                                 &x.key,
-                                ddns::DdnsJSON::DDNS_JSON_FILE_EXT
+                                dns::ResourceRecordSet::DDNS_JSON_FILE_EXT
                             );
                             results.unverified_jsons.push(ddnsjson);
                         }
@@ -311,7 +313,7 @@ fn fetch_ddns_jsons_from_s3<'unverified>(
                             log::error!(
                                 "failed to deserde key '{}' into a {} object: {}",
                                 &x.key,
-                                ddns::DdnsJSON::DDNS_JSON_FILE_EXT,
+                                dns::ResourceRecordSet::DDNS_JSON_FILE_EXT,
                                 e,
                             );
                             results.failed_json_deserdes.push((
@@ -350,8 +352,8 @@ struct RunResults<'unverified> {
     failed_json_deserdes: Vec<(String, anyhow::Error)>,
     failed_signature_checks: Vec<(&'unverified str, anyhow::Error)>, // references the unverifid_jsons list
     failed_key_parses: Vec<(String, anyhow::Error)>,
-    unverified_jsons: Vec<SignedJSON<DdnsJSON>>,
-    verified_jsons: Vec<&'unverified DdnsJSON>, // references the unverified_jsons list
+    unverified_jsons: Vec<SignedJSON<dns::ResourceRecordSet>>,
+    verified_jsons: Vec<&'unverified dns::ResourceRecordSet>, // references the unverified_jsons list
 }
 impl<'ltself> RunResults<'ltself> {
     fn new() -> Self {
@@ -393,7 +395,7 @@ impl<'ltself> RunResults<'ltself> {
         }
         println!("dns records adjusted:");
         for verified in self.verified_jsons.iter() {
-            println!("\t * {} -> {}", &verified.domain, &verified.ip)
+            println!("\t * {} -> {}", &verified.name, &verified.data)
         }
     }
 }
@@ -403,7 +405,7 @@ mod test {
     use std::str::FromStr;
 
     use crate::{
-        ddns::DdnsJSON,
+        dns::{self, ResourceRecordSet},
         keys::{load_ed25519_certificate_pem, read_file_limited},
         server::check_valid_ddns_request,
         signatures::SignedJSON,
@@ -411,10 +413,12 @@ mod test {
 
     #[test]
     fn sign_and_validate_a_record() {
-        let record = DdnsJSON {
-            domain: "augs.sarif.example".to_owned(),
-            ip: std::net::IpAddr::V4(std::net::Ipv4Addr::from_str("192.168.1.1").unwrap()),
-            ttl: None,
+        let record = ResourceRecordSet {
+            name: "augs.sarif.example".to_owned(),
+            data: crate::dns::RecordData::A(vec![
+                std::net::Ipv4Addr::from_str("192.168.1.1").unwrap(),
+            ]),
+            ttl: 300,
         };
 
         /* Load the private key for signing */
@@ -424,7 +428,8 @@ mod test {
         /* Sign the Record */
         let signed_bytes =
             crate::client::DynDynserClient::sign_object(&private_key, record).unwrap();
-        let reserded_bytes = serde_json::from_slice::<SignedJSON<DdnsJSON>>(&signed_bytes).unwrap();
+        let reserded_bytes =
+            serde_json::from_slice::<SignedJSON<dns::ResourceRecordSet>>(&signed_bytes).unwrap();
 
         /* Load the public key for validating */
         let certbytes = read_file_limited("test/certs/augs.sarif.example.crt", 1400);
@@ -445,7 +450,7 @@ mod test {
         );
 
         assert_eq!(
-            &cert.common_name, &reserded_bytes.payload.domain,
+            &cert.common_name, &reserded_bytes.payload.name,
             "expected cert.common_name to be same as the reserded_bytes domain request"
         );
 
