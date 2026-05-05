@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use anyhow::Context;
 
@@ -10,7 +10,7 @@ use crate::{
     config::*,
     dns::{self, Change, ChangeInfo, ResourceRecordSet, route53},
     keys::{self, CertMatch},
-    signatures::{self, SignedJSON},
+    signatures::{self, SignedPayload},
 };
 
 struct DynDynserServer<'a> {
@@ -27,10 +27,10 @@ impl<'a> DynDynserServer<'a> {
 
     fn fetch_ddns_jsons_from_s3(
         &self,
-    ) -> Result<(Vec<SignedJSON<ResourceRecordSet>>, ServerErrors), anyhow::Error> {
+    ) -> Result<(Vec<SignedPayload<ResourceRecordSet>>, ServerErrors), anyhow::Error> {
         log::info!("Fetching s3 bucket items");
         let mut errors = ServerErrors::new();
-        let mut unverified_jsons: Vec<SignedJSON<ResourceRecordSet>> = Vec::new();
+        let mut unverified_jsons: Vec<SignedPayload<ResourceRecordSet>> = Vec::new();
 
         /* S3 set up */
         let region = self
@@ -86,7 +86,7 @@ impl<'a> DynDynserServer<'a> {
                 /* Try to deserde into a ddnsjson object */
                 match bucket.get_object(&x.key) {
                     Ok(response_data) => {
-                        match serde_json::from_slice::<SignedJSON<dns::ResourceRecordSet>>(
+                        match serde_json::from_slice::<SignedPayload<dns::ResourceRecordSet>>(
                             response_data.as_slice(),
                         ) {
                             Ok(ddnsjson) => {
@@ -192,7 +192,7 @@ impl<'a> DynDynserServer<'a> {
     fn validate_unverified_dns_requests(
         &self,
         domain_certs: &[CertMatch],
-        unverified_ddns_requests: &'a [SignedJSON<ResourceRecordSet>],
+        unverified_ddns_requests: &'a [SignedPayload<ResourceRecordSet>],
         errors: &mut ServerErrors,
     ) -> Vec<&'a ResourceRecordSet> {
         let mut verified_requests: Vec<&ResourceRecordSet> =
@@ -201,23 +201,30 @@ impl<'a> DynDynserServer<'a> {
         for signed_json in unverified_ddns_requests.iter() {
             log::info!(
                 "Checking signature of '{}' ddns request",
-                &signed_json.payload.name
+                &signed_json.envelope.payload.name
             );
-            match DynDynserServer::check_valid_ddns_request(signed_json, domain_certs)
-                .context("failed to check signing key request")
+            match DynDynserServer::check_valid_ddns_request(
+                signed_json,
+                domain_certs,
+                self.conf.max_time_ago_signed_at,
+            )
+            .context("failed to check signing key request")
             {
                 Ok(_) => {
-                    log::info!("Validated '{}' domain request", &signed_json.payload.name);
-                    verified_requests.push(&signed_json.payload);
+                    log::info!(
+                        "Validated '{}' domain request",
+                        &signed_json.envelope.payload.name
+                    );
+                    verified_requests.push(&signed_json.envelope.payload);
                 }
                 Err(e) => {
                     log::error!(
                         "Could not validate '{}' request: {:?}",
-                        &signed_json.payload.name,
+                        &signed_json.envelope.payload.name,
                         e,
                     );
                     errors.failed_signature_checks.push((
-                        signed_json.payload.name.to_owned(),
+                        signed_json.envelope.payload.name.to_owned(),
                         e.context("signature did not pass validation"),
                     ));
                 }
@@ -228,34 +235,45 @@ impl<'a> DynDynserServer<'a> {
     }
 
     fn check_valid_ddns_request(
-        signed_json: &SignedJSON<dns::ResourceRecordSet>,
+        signed_json: &SignedPayload<dns::ResourceRecordSet>,
         domain_key_map: &[CertMatch],
+        max_time_ago: Duration,
     ) -> Result<(), anyhow::Error> {
         /* Look for Matching Key of domain */
         log::info!(
             "looking for key that matches '{}'",
-            &signed_json.payload.name
+            &signed_json.envelope.payload.name
         );
         let vk = domain_key_map
             .iter()
-            .find(|x| x.common_name == signed_json.payload.name)
+            .find(|x| x.common_name == signed_json.envelope.payload.name)
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Received ddns request for domain '{}', but no matching key could be found",
-                    &signed_json.payload.name,
+                    &signed_json.envelope.payload.name,
                 )
             })?;
 
         /* if key is found, try to validate the signature */
         vk.verifying_key
             .verify_strict(
-                serde_json::to_string_pretty(&signed_json.payload)
-                    .context("failed to re-serialize during signature check")?
-                    .as_bytes(),
+                &serde_json_canonicalizer::to_vec(&signed_json.envelope)
+                    .context("failed to re-serialize during signature check")?,
                 signed_json.signature.inner(),
             )
             .context("ddns json signature did not match")?;
 
+        let signed_at =
+            chrono::DateTime::from_timestamp(signed_json.envelope.signed_at_unix_secs, 0)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("could not construct a timestamp for this envelope")
+                })?;
+
+        let now = chrono::Utc::now();
+        let tolerance = chrono::Duration::seconds(15);
+        if signed_at > (now + tolerance) {
+            return Err(anyhow::anyhow!("Signature timestamp is in the future"));
+        }
         Ok(())
     }
 
@@ -338,7 +356,7 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
     }
     println!("Found {} .ddns.json files", unverified_ddns_requests.len());
     unverified_ddns_requests.iter().for_each(|unverified| {
-        println!("\t * {}", &unverified.payload.name);
+        println!("\t * {}", &unverified.envelope.payload.name);
     });
 
     /* Step 2: Validate the requests */
@@ -453,13 +471,13 @@ impl ServerErrors {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, time::Duration};
 
     use crate::{
         dns::{self, ResourceRecordSet},
         keys::{load_ed25519_certificate_pem, read_file_limited},
         server::DynDynserServer,
-        signatures::SignedJSON,
+        signatures::{SignableEnvelope, SignedPayload},
     };
 
     #[test]
@@ -472,15 +490,16 @@ mod test {
             ttl: 300,
         };
 
+        let enevlope = SignableEnvelope::new(record);
+
         /* Load the private key for signing */
         let keybytes = read_file_limited("test/certs/augs.sarif.example.priv", 1400).unwrap();
         let private_key = crate::keys::load_ed25519_private_key(&keybytes, None).unwrap();
 
         /* Sign the Record */
-        let signed_bytes =
-            crate::client::DynDynserClient::sign_object(&private_key, record).unwrap();
+        let signed_bytes = enevlope.sign(&private_key).unwrap();
         let reserded_bytes =
-            serde_json::from_slice::<SignedJSON<dns::ResourceRecordSet>>(&signed_bytes).unwrap();
+            serde_json::from_slice::<SignedPayload<dns::ResourceRecordSet>>(&signed_bytes).unwrap();
 
         /* Load the public key for validating */
         let certbytes = read_file_limited("test/certs/augs.sarif.example.crt", 1400);
@@ -494,6 +513,8 @@ mod test {
             cert.is_ok(),
             "expected augs.sarif.example.crt to be loaded as an x509 cert file"
         );
+
+        /* Check the Common Name is valid for the domain in question */
         let cert = cert.unwrap();
         assert_eq!(
             &cert.common_name, "augs.sarif.example",
@@ -501,11 +522,15 @@ mod test {
         );
 
         assert_eq!(
-            &cert.common_name, &reserded_bytes.payload.name,
+            &cert.common_name, &reserded_bytes.envelope.payload.name,
             "expected cert.common_name to be same as the reserded_bytes domain request"
         );
 
-        let res = DynDynserServer::check_valid_ddns_request(&reserded_bytes, &vec![cert]);
+        let res = DynDynserServer::check_valid_ddns_request(
+            &reserded_bytes,
+            &vec![cert],
+            Duration::from_secs(60),
+        );
         assert!(res.is_ok(), "expected signature to pass validation");
     }
 }

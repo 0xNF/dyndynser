@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -59,6 +61,12 @@ pub struct ServerArgs {
         env = "DYNDYNSER_AWS_REGION"
     )]
     pub aws_region: String,
+
+    #[arg(
+        long = "max-signed-at-time-ago",
+        help = "Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale"
+    )]
+    pub max_time_ago_signed_at_secs: Option<u32>,
 }
 
 #[derive(clap::Args)]

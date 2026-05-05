@@ -90,6 +90,8 @@ pub struct ConfigServer {
 
     // whether this run should make mutating changes or not
     pub is_dry_run: bool,
+
+    pub max_time_ago_signed_at: Duration,
 }
 
 impl ConfigServer {
@@ -99,6 +101,11 @@ impl ConfigServer {
         let hosted_dns_zone_id = args.hosted_dns_zone_id.trim();
         let keys_search_path = args.keys_search_path.trim();
         let region = args.aws_region.trim();
+        let max_time_ago_signed_at = args
+            .max_time_ago_signed_at_secs
+            .map_or(Duration::from_hours(1), |secs| {
+                Duration::from_secs(secs as u64)
+            });
 
         /* Check Empties */
         if s3_bucket.is_empty() {
@@ -120,6 +127,7 @@ impl ConfigServer {
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
+            max_time_ago_signed_at,
         })
     }
 }

@@ -10,6 +10,7 @@ use crate::config::ConfigClient;
 use crate::dns;
 use crate::keys;
 use crate::signatures;
+use crate::signatures::SignableEnvelope;
 
 pub struct DynDynserClient<'a> {
     conf: &'a ConfigClient,
@@ -45,29 +46,6 @@ impl<'a> DynDynserClient<'a> {
 
         Ok(ip_addr)
     }
-
-    // Signs anything that be JSON-serialized with the given signing key, producing a new object which contains the signature, and the object that was signed
-    pub fn sign_object(
-        signing_key: &ed25519_dalek::SigningKey,
-        serder: impl serde::Serialize,
-    ) -> Result<Vec<u8>, anyhow::Error> {
-        let payload_json = serde_json::to_string_pretty(&serder)
-            .context("failed to json serialize the ddns object")?;
-
-        /* Sign bytes */
-        log::info!("Signing result");
-        let sig = signing_key.sign(payload_json.as_bytes());
-
-        let signed_payload = signatures::SignedJSON {
-            payload: serder,
-            signature: signatures::Signature::new(sig),
-        };
-
-        let signed_bytes = serde_json::to_vec_pretty(&signed_payload)
-            .context("failed to jsonify the signed ddns json")?;
-
-        Ok(signed_bytes)
-    }
 }
 
 // In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
@@ -88,7 +66,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
         .context("failed to get IP address of this machine")?;
 
     /* Create and sign the DDNS struct json */
-    let dns_obj = dns::ResourceRecordSet {
+    let dns_obj = &dns::ResourceRecordSet {
         ttl: conf.ttl.map_or(300, |d| d.as_secs() as u32),
         name: conf.domain,
         data: match ip {
@@ -103,7 +81,10 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     let signing_key =
         keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
 
-    let signed_json_bytes = DynDynserClient::sign_object(&signing_key, &dns_obj)
+    let name = dns_obj.name.clone();
+    let signable = signatures::SignableEnvelope::new(dns_obj);
+    let signed_json_bytes = signable
+        .sign(&signing_key)
         .context("Failed to sign payload object")?;
 
     /* Send to S3 */
@@ -141,7 +122,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
 
         println!(
             "Successfully wrote domain request for '{}' to s3 bucket.\nFile key: {}",
-            &dns_obj.name, ddns_json_path,
+            name, ddns_json_path,
         );
     }
     Ok(())
