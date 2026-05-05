@@ -31,7 +31,7 @@ impl DomainName {
         for label in &labels {
             // Each label must be between 1 and 63 characters
             if label.is_empty() || label.len() > 63 {
-                anyhow::bail!("domain sub-labels must be between 1-64 characters");
+                anyhow::bail!("domain sub-labels must be between 1-63 characters");
             }
 
             // Labels cannot start or end with a hyphen
@@ -41,7 +41,7 @@ impl DomainName {
 
             // Labels may only contain ASCII alphanumeric characters and hyphens
             if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-                anyhow::bail!("domain sub-label mnust only be ascii alphanumeric");
+                anyhow::bail!("domain sub-label must only be ascii alphanumeric");
             }
         }
 
@@ -61,7 +61,7 @@ impl Deref for DomainName {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        return self.inner.as_ref();
+        self.inner.as_ref()
     }
 }
 

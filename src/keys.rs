@@ -121,7 +121,7 @@ fn load_ed25519_openssh_private_key(
     Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
 }
 
-// Parses the given bytes as an OopenSSL ED25199 formatted private key
+// Parses the given bytes as an OopenSSL ED25519 formatted private key
 fn load_ed25519_openssl_key(key_bytes: &[u8]) -> Result<ed25519_dalek::SigningKey, anyhow::Error> {
     let s: &str = std::str::from_utf8(key_bytes).context("not a valid utf8 string")?;
     ed25519_dalek::SigningKey::from_pkcs8_pem(s)

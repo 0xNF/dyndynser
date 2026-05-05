@@ -176,7 +176,7 @@ impl<'a> DynDynserServer<'a> {
                 .context("invalid key_path")?;
 
             let crtmatch = match keys::load_ed25519_certificate_pem(&fbytes)
-                .context("failed to load an x509 certifciate from bytes")
+                .context("failed to load an x509 certificate from bytes")
             {
                 Ok(crt) => crt,
                 Err(e) => {
@@ -274,15 +274,15 @@ impl<'a> DynDynserServer<'a> {
                     anyhow::anyhow!("could not construct a timestamp for this envelope")
                 })?;
 
-        let now = chrono::Utc::now();
         let tolerance = chrono::Duration::seconds(15); /* Clock Drift */
-        let max_age = now + max_time_ago + tolerance;
-        let time_diff = max_age - signed_at;
-        if (now + max_time_ago + tolerance) > now {
+
+        let max_age_permitted = signed_at + max_time_ago + tolerance;
+        let now = chrono::Utc::now();
+        if max_age_permitted < now {
             anyhow::bail!(
                 "Signature is too old (age: {}s, max: {}s)",
-                time_diff,
-                max_time_ago
+                (now - signed_at).num_seconds(),
+                max_time_ago.num_seconds(),
             );
         }
         Ok(())
@@ -503,14 +503,14 @@ mod test {
             ttl: 300,
         };
 
-        let enevlope = SignableEnvelope::new(record);
+        let envelope = SignableEnvelope::new(record);
 
         /* Load the private key for signing */
         let keybytes = read_file_limited("test/certs/augs.sarif.example.priv", 1400).unwrap();
         let private_key = crate::keys::load_ed25519_private_key(&keybytes, None).unwrap();
 
         /* Sign the Record */
-        let signed_bytes = enevlope.sign(&private_key).unwrap();
+        let signed_bytes = envelope.sign(&private_key).unwrap();
         let reserded_bytes =
             serde_json::from_slice::<SignedPayload<dns::ResourceRecordSet>>(&signed_bytes).unwrap();
 

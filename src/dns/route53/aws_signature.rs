@@ -12,7 +12,7 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     mac.finalize().into_bytes().into()
 }
 
-// Returns the hex-encodedd SHA256 hashed bytes of data
+// Returns the hex-encoded SHA256 hashed bytes of data
 fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
 }

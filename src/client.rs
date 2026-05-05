@@ -80,7 +80,6 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     let signing_key =
         keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
 
-    let name = dns_obj.name.clone();
     let signable = signatures::SignableEnvelope::new(dns_obj);
     let signed_json_bytes = signable
         .sign(&signing_key)
@@ -121,7 +120,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
 
         println!(
             "Successfully wrote domain request for '{}' to s3 bucket.\nFile key: {}",
-            name, ddns_json_path,
+            dns_obj.name, ddns_json_path,
         );
     }
     Ok(())

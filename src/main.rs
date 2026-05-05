@@ -16,7 +16,7 @@ const APP_NAME: &str = "dyndynser";
 
 fn main() -> anyhow::Result<()> {
     /* Set Loggers */
-    init_global_loggers();
+    init_global_loggers()?;
 
     log::debug!("loading dyndynser");
     let cli_parsed = CLI::parse();
@@ -111,7 +111,7 @@ impl log::Log for Syslog5424Logger {
     fn flush(&self) {}
 }
 
-fn init_global_loggers() {
+fn init_global_loggers() -> Result<(), anyhow::Error> {
     let env_log = env_logger::Builder::from_default_env().build();
     let max_level = env_log.filter();
 
@@ -120,11 +120,16 @@ fn init_global_loggers() {
         /* conditionally add syslogging for systems that support it */
         #[cfg(unix)]
         {
-            let ss =
-                Syslog5424Logger::new(APP_NAME, syslog::Facility::LOG_USER, log::LevelFilter::Info)
-                    .expect("Failed to open RFC5424 syslog");
-
-            Box::new(ss)
+            match Syslog5424Logger::new(
+                APP_NAME,
+                syslog::Facility::LOG_USER,
+                log::LevelFilter::Info,
+            ) {
+                Ok(ss) => Box::new(ss),
+                Err(_) => {
+                    anyhow::bail!("Cannot contact syslog service")
+                }
+            }
         },
     ];
 
@@ -132,4 +137,5 @@ fn init_global_loggers() {
 
     log::set_boxed_logger(Box::new(multi)).expect("Failed to set logger");
     log::set_max_level(max_level);
+    Ok(())
 }
