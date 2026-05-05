@@ -7,7 +7,8 @@ const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
 
 use crate::{
     config::*,
-    ddns::{self, DDNSRoute53Config, DdnsJSON, DdnsRoute53Record},
+    ddns::{self, DdnsJSON},
+    dns::{Change, ChangeAction, RecordType, ResourceRecordSet, route53},
     keys::{self, CertMatch},
     signatures::{self, SignedJSON},
 };
@@ -121,7 +122,8 @@ pub fn handle_server(
     }
 
     /* Retrieve all the ddns requests from the s3 bucket */
-    let mut results = fetch_ddns_jsons_from_s3(&conf)
+    let credentials = s3::creds::Credentials::default()?;
+    let mut results = fetch_ddns_jsons_from_s3(&conf, credentials.clone())
         .context("failed to perform S3 read portion of server operation")?;
 
     /* Check any ddns files to operate over  */
@@ -173,64 +175,92 @@ pub fn handle_server(
         }
     }
 
-    /* read the ddns-route53 config file */
-    let contents = std::fs::read_to_string(&conf.ddns_file_path)
-        .context("failed to read ddns_route53 ddns config file")?;
-    let mut route53_config: DDNSRoute53Config = serde_yaml::from_str(&contents)
-        .context("ddns_file_path existed but could not be parsed into a YAML structure")?;
-
-    for valid_request in results.verified_jsons.iter() {
+    let mut changes: Vec<Change> = Vec::with_capacity(results.verified_jsons.len());
+    for verified_request in results.verified_jsons.iter() {
         log::debug!(
             "processing validated request for '{}'",
-            &valid_request.domain
+            &verified_request.domain
         );
 
-        let with_traiing_dot = if valid_request.domain.ends_with('.') {
-            Cow::Borrowed(&valid_request.domain)
+        let with_traiing_dot = if verified_request.domain.ends_with('.') {
+            Cow::Borrowed(&verified_request.domain)
         } else {
             log::debug!("domain didn't end with '.', adding one ourselves");
-            let mut owned = valid_request.domain.to_owned();
+            let mut owned = verified_request.domain.to_owned();
             owned.push('.');
             Cow::Owned(owned)
         };
 
-        let new_ddns_record = DdnsRoute53Record {
-            name: with_traiing_dot.to_string(),
-            record_type: if valid_request.ip.is_ipv4() {
-                String::from("A")
-            } else if valid_request.ip.is_ipv6() {
-                String::from("AAAA")
-            } else {
-                String::from("?")
+        let dns_change = Change {
+            action: crate::dns::ChangeAction::Upsert,
+            record_set: crate::dns::ResourceRecordSet {
+                name: with_traiing_dot.to_string(),
+                record_type: if verified_request.ip.is_ipv4() {
+                    crate::dns::RecordType::A
+                } else if verified_request.ip.is_ipv6() {
+                    crate::dns::RecordType::AAAA
+                } else {
+                    Err(anyhow::anyhow!("Invalid record type for IP address"))?
+                },
+                ttl: 300 as u64,
+                values: vec![verified_request.ip.to_string()],
             },
-            time_to_live: Some(300),
         };
-
-        match route53_config
-            .route_53
-            .records_set
-            .iter()
-            .position(|p| p.name == new_ddns_record.name)
-        {
-            Some(index) => route53_config.route_53.records_set[index] = new_ddns_record,
-            None => route53_config.route_53.records_set.push(new_ddns_record),
-        }
+        changes.push(dns_change);
     }
 
-    let yaml_str = serde_yaml::to_string(&route53_config)
-        .context("failed to serialize route53 config back into yaml bytes")?;
-
     if conf.is_dry_run {
-        println!("Will write this yaml:\n\n```yaml\n{}\n```", yaml_str);
+        println!(
+            "Will write these changes to the DNS records:\n\n```json\n{:?}\n```",
+            changes
+        );
         return Ok(());
     }
 
-    log::debug!("Writing yaml ddns-route53 config file");
-    /* Write the valid requests to it, and write file back to disk */
-    std::fs::write(&conf.ddns_file_path, yaml_str)
-        .context("failed to write new ddns-route53 yaml config")?;
+    let route53_client = route53::route53::Route53Client::from_s3_credentials(&credentials);
 
-    log::info!("Successfully wrote ddns-route53 config yaml file");
+    // for valid_request in results.verified_jsons.iter() {
+    //     log::debug!(
+    //         "processing validated request for '{}'",
+    //         &valid_request.domain
+    //     );
+
+    //     let with_traiing_dot = if valid_request.domain.ends_with('.') {
+    //         Cow::Borrowed(&valid_request.domain)
+    //     } else {
+    //         log::debug!("domain didn't end with '.', adding one ourselves");
+    //         let mut owned = valid_request.domain.to_owned();
+    //         owned.push('.');
+    //         Cow::Owned(owned)
+    //     };
+
+    //     let dns_change = Change {
+    //         action: crate::dns::ChangeAction::Upsert,
+    //         record_set: crate::dns::ResourceRecordSet {
+    //             name: with_traiing_dot.to_string(),
+    //             record_type: if valid_request.ip.is_ipv4() {
+    //                 crate::dns::RecordType::A
+    //             } else if valid_request.ip.is_ipv6() {
+    //                 crate::dns::RecordType::AAAA
+    //             } else {
+    //                 Err(anyhow::anyhow!("Invalid record type for IP address"))?
+    //             },
+    //             ttl: 300 as u64,
+    //             values: vec![valid_request.ip.to_string()],
+    //         },
+    //     };
+
+    //     let changes = vec![Change {
+    //         action: ChangeAction::Upsert,
+    //         record_set: ResourceRecordSet {
+    //             name: "api.example.com.".into(),
+    //             record_type: RecordType::A,
+    //             ttl: 60,
+    //             values: vec!["203.0.113.42".into()],
+    //         },
+    //     }];
+    // }
+
     println!("Wrote ddns-route53 config file");
 
     /* trigger a ddns request automatically via a Process Command */
@@ -242,17 +272,17 @@ pub fn handle_server(
 
 fn fetch_ddns_jsons_from_s3<'unverified>(
     conf: &'unverified ConfigServer,
+    credentials: s3::creds::Credentials,
 ) -> Result<RunResults<'unverified>, anyhow::Error> {
     log::info!("Fetching s3 bucket items");
     let mut results = RunResults::new();
 
     /* S3 set up */
-    let credentials = s3::creds::Credentials::default()?;
     let region = conf
         .region
         .parse()
         .context("invalid AWS region found during S3 write")?;
-    let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials)
+    let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials.clone())
         .context("failed to rerieve s3 credentials")?;
 
     println!(
