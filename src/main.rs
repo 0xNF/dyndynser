@@ -103,16 +103,22 @@ pub enum SubCommands {
         #[arg(
             long,
             help = "Passphrase to decrypt the private key (omit if the key is not encrypted)",
-            env = "DYNDYNSER__SIGNING_KEY_PASSWORD"
+            env = "DYNDYNSER_SIGNING_KEY_PASSWORD"
         )]
         signing_key_password: Option<String>,
 
         #[arg(
             long = "aws-region",
             help = "AWS region of the S3 bucket (e.g. eu-west-1)",
-            env = "DYNDYNSER__AWS_REGION"
+            env = "DYNDYNSER_AWS_REGION"
         )]
         aws_region: String,
+
+        #[arg(
+            long = "ip-addr-check-url",
+            help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6"
+        )]
+        ip_addr_check_url: Option<String>,
     },
 }
 
@@ -147,6 +153,7 @@ fn main() -> anyhow::Result<()> {
             key_path,
             signing_key_password,
             aws_region: region,
+            ip_addr_check_url,
         } => client::handle_client(
             is_dry_run,
             &s3_bucket,
@@ -156,6 +163,7 @@ fn main() -> anyhow::Result<()> {
             &key_path,
             signing_key_password.as_deref(),
             &region,
+            ip_addr_check_url.as_deref(),
         ),
     }
 }

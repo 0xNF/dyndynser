@@ -422,7 +422,8 @@ mod test {
         let private_key = crate::keys::load_ed25519_private_key(&keybytes, None).unwrap();
 
         /* Sign the Record */
-        let signed_bytes = crate::client::sign_object(&private_key, record).unwrap();
+        let signed_bytes =
+            crate::client::DynDynserClient::sign_object(&private_key, record).unwrap();
         let reserded_bytes = serde_json::from_slice::<SignedJSON<DdnsJSON>>(&signed_bytes).unwrap();
 
         /* Load the public key for validating */

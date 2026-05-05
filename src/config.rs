@@ -18,6 +18,9 @@ pub struct ConfigClient {
     // Domain that this client is configured to push for
     pub domain: String,
 
+    // URL to query for an IP Address
+    pub ip_addr_check_url: String,
+
     // TTL to mark the record valid for
     pub ttl: Option<Duration>,
 
@@ -29,6 +32,8 @@ pub struct ConfigClient {
 }
 
 impl ConfigClient {
+    const DEFAULT_IP_CHECK_URL: &str = "https://checkip.amazonaws.com";
+
     pub fn parse(
         is_dry_run: bool,
         s3_bucket: &str,
@@ -38,13 +43,15 @@ impl ConfigClient {
         key_path: &str,
         signing_key_password: Option<&str>,
         region: &str,
+        ip_addr_check_url: Option<&str>,
     ) -> Result<Self, anyhow::Error> {
         let s3_bucket = s3_bucket.trim();
         let domain = domain.trim();
         let key_path = key_path.trim();
         let region = region.trim();
         let ddns_json_dir = ddns_json_dir.trim();
-        let ttl = ttl_seconds.map(|t| Duration::from_secs(t as u64));
+        let ttl: Option<Duration> = ttl_seconds.map(|t| Duration::from_secs(t as u64));
+        let ip_addr_check_url = ip_addr_check_url.unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
 
         /* Check Empties */
         if s3_bucket.is_empty() {
@@ -57,6 +64,8 @@ impl ConfigClient {
             Err(anyhow::anyhow!("Amazon Region cannot be empty"))?;
         } else if ddns_json_dir.is_empty() {
             Err(anyhow::anyhow!("s3 bucket ddns json path cannot be empty"))?;
+        } else if ip_addr_check_url.is_empty() {
+            Err(anyhow::anyhow!("ip check addr cannot be empty"))?;
         }
 
         /* Find and load the keyfile bytes */
@@ -71,6 +80,7 @@ impl ConfigClient {
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),
+            ip_addr_check_url: ip_addr_check_url.to_owned(),
         })
     }
 }
