@@ -472,8 +472,6 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
         log::info!("Doing a dry run, will not actually update the ddns file");
     }
 
-    let cleanup_keys: Vec<&S3Key> = Vec::new();
-
     /* Step 1: Fetch Unverified Requests */
 
     let (unverified_ddns_requests, mut errors) = dyndynser
