@@ -1,11 +1,6 @@
 use std::time::Duration;
 
-use anyhow::Context;
-
-use crate::{
-    cli::{self, ServerArgs},
-    keys,
-};
+use crate::cli::{self, ServerArgs};
 
 #[derive(Debug)]
 pub struct ConfigClient {
@@ -27,8 +22,7 @@ pub struct ConfigClient {
     // TTL to mark the record valid for
     pub ttl: Option<Duration>,
 
-    // private key file to sign .json files with
-    pub signing_key: ed25519_dalek::SigningKey,
+    pub key_path: String,
 
     // whether this run should make mutating changes or not
     pub is_dry_run: bool,
@@ -64,16 +58,11 @@ impl ConfigClient {
             Err(anyhow::anyhow!("ip check addr cannot be empty"))?;
         }
 
-        /* Find and load the keyfile bytes */
-        let key_bytes = keys::read_file_limited(key_path, 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
-        let signing_key =
-            keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
-
         Ok(ConfigClient {
             is_dry_run: args.is_dry_run,
             domain: domain.to_lowercase(),
             ttl,
-            signing_key,
+            key_path: key_path.to_owned(),
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             region: region.to_owned(),

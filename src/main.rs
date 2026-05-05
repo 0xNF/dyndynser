@@ -8,7 +8,7 @@ mod signatures;
 
 use std::{collections::BTreeMap, sync::Mutex};
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 use crate::cli::CLI;
 

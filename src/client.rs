@@ -8,6 +8,7 @@ use reqwest::{self, StatusCode};
 use crate::cli;
 use crate::config::ConfigClient;
 use crate::dns;
+use crate::keys;
 use crate::signatures;
 
 pub struct DynDynserClient<'a> {
@@ -96,7 +97,13 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
         },
     };
 
-    let signed_json_bytes = DynDynserClient::sign_object(&conf.signing_key, &dns_obj)
+    /* Find and load the keyfile bytes */
+    let key_bytes =
+        keys::read_file_limited(conf.key_path, 10 * 1024).context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+    let signing_key =
+        keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
+
+    let signed_json_bytes = DynDynserClient::sign_object(&signing_key, &dns_obj)
         .context("Failed to sign payload object")?;
 
     /* Send to S3 */
