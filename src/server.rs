@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::Context;
 use chrono::TimeDelta;
+use ed25519_dalek::VerifyingKey;
 
 use crate::{
     cli,
@@ -16,12 +17,67 @@ struct DynDynserServer<'a> {
     credentials: &'a s3::creds::Credentials,
 }
 
+/// An unverified ddns request, which is structurally sound, but has not yet passed signature validation
+///
+/// call the `validate()` method to get a Validated, safe to use struct
 #[derive(Debug)]
-struct DdnsResult {
+struct UnverifiedDdnsRequest {
     pub signed_payload: SignedPayload<ResourceRecordSet>,
     pub s3_key: String,
 }
+
+impl UnverifiedDdnsRequest {
+    pub fn validate(
+        &'_ self,
+        vk: VerifyingKey,
+        max_time_ago: chrono::TimeDelta,
+    ) -> Result<VerifiedDdnsRequest<'_>, anyhow::Error> {
+        /* if key is found, try to validate the signature */
+        vk.verify_strict(
+            &serde_json_canonicalizer::to_vec(&self.signed_payload.envelope)
+                .context("failed to re-serialize during signature check")?,
+            self.signed_payload.signature.inner(),
+        )
+        .context("ddns json signature did not match")?;
+
+        let signed_at = chrono::DateTime::from_timestamp(
+            self.signed_payload.envelope.signed_at_unix_secs,
+            0,
+        )
+        .ok_or_else(|| anyhow::anyhow!("could not construct a timestamp for this envelope"))?;
+
+        let tolerance = chrono::Duration::seconds(15); /* Clock Drift */
+
+        let max_age_permitted = signed_at + max_time_ago + tolerance;
+        let now = chrono::Utc::now();
+        if max_age_permitted < now {
+            anyhow::bail!(
+                "Signature is too old (age: {}s, max: {}s)",
+                (now - signed_at).num_seconds(),
+                max_time_ago.num_seconds(),
+            );
+        }
+
+        let verified = VerifiedDdnsRequest {
+            resource_record: &self.signed_payload.envelope.payload,
+            s3_key: &self.s3_key,
+        };
+
+        Ok(verified)
+    }
+}
+
+/// A cryptographically validated Ddns request
+///
+/// Items of this type are only constructable by the `validate()` method on an Unverified struct with a matching key
+/// and can thus be taken as confirmed safe.
+struct VerifiedDdnsRequest<'a> {
+    pub resource_record: &'a ResourceRecordSet,
+    pub s3_key: &'a str,
+}
+
 impl<'a> DynDynserServer<'a> {
+    /// Instantiates the Server with the given configurtion
     fn with_config(conf: &'a ConfigServer, s3_creds: &'a s3::creds::Credentials) -> Self {
         Self {
             conf,
@@ -29,19 +85,29 @@ impl<'a> DynDynserServer<'a> {
         }
     }
 
-    fn fetch_ddns_jsons_from_s3(&self) -> Result<(Vec<DdnsResult>, ServerErrors), anyhow::Error> {
-        log::info!("Fetching s3 bucket items");
-        let mut errors = ServerErrors::new();
-        let mut unverified_requests: Vec<DdnsResult> = Vec::new();
-
-        /* S3 set up */
+    /// Returns the configured S3 Bucket as Rust object
+    fn get_s3_bucket(&self) -> Result<Box<s3::Bucket>, anyhow::Error> {
         let region = self
             .conf
             .region
             .parse()
             .context("invalid AWS region found during S3 write")?;
-        let bucket = s3::Bucket::new(&self.conf.s3_bucket, region, self.credentials.clone())
-            .context("failed to retrieve s3 credentials")?;
+        s3::Bucket::new(&self.conf.s3_bucket, region, self.credentials.clone())
+            .context("failed to retrieve s3 credentials")
+    }
+
+    /// Loads S3 and retrievs all the .ddns.json files found
+    ///
+    /// Paginates over S3, so can in theory support very large item counts
+    fn fetch_ddns_jsons_from_s3(
+        &self,
+    ) -> Result<(Vec<UnverifiedDdnsRequest>, ServerErrors), anyhow::Error> {
+        log::info!("Fetching s3 bucket items");
+        let mut errors = ServerErrors::new();
+        let mut unverified_requests: Vec<UnverifiedDdnsRequest> = Vec::new();
+
+        /* S3 set up */
+        let bucket = self.get_s3_bucket().context("failed to get S3 bucket")?;
 
         println!(
             "Querying Bucket: {}/{}",
@@ -97,7 +163,7 @@ impl<'a> DynDynserServer<'a> {
                                     &x.key,
                                     dns::ResourceRecordSet::DDNS_JSON_FILE_EXT
                                 );
-                                unverified_requests.push(DdnsResult {
+                                unverified_requests.push(UnverifiedDdnsRequest {
                                     signed_payload: ddnsjson,
                                     s3_key: x.key.clone(),
                                 });
@@ -139,7 +205,7 @@ impl<'a> DynDynserServer<'a> {
         Ok((unverified_requests, errors))
     }
 
-    // Load all the known .crt files into memory at once
+    /// Load all the known .crt files into memory at once
     fn get_public_key_map(
         &self,
         errors: &mut ServerErrors,
@@ -193,43 +259,50 @@ impl<'a> DynDynserServer<'a> {
         Ok(v)
     }
 
-    // Validate each request by finding a corresponding Public Key
+    /// Validate each request by finding a corresponding Public Key
+    ///
+    /// Puts errors into the `errors` struct
     fn validate_unverified_dns_requests(
         &self,
         domain_certs: &[CertMatch],
-        unverified_ddns_requests: &'a [DdnsResult],
+        unverified_ddns_requests: &'a [UnverifiedDdnsRequest],
         errors: &mut ServerErrors,
-    ) -> Vec<&'a ResourceRecordSet> {
-        let mut verified_requests: Vec<&ResourceRecordSet> =
+    ) -> Vec<VerifiedDdnsRequest<'a>> {
+        let mut verified_requests: Vec<VerifiedDdnsRequest<'a>> =
             Vec::with_capacity(unverified_ddns_requests.len());
         /* Validate each request by finding a corresponding Public Key */
-        for ddns_result in unverified_ddns_requests.iter() {
+        for unverified_request in unverified_ddns_requests.iter() {
             log::info!(
                 "Checking signature of '{}' ddns request",
-                &ddns_result.signed_payload.envelope.payload.name
+                &unverified_request.signed_payload.envelope.payload.name
             );
             match DynDynserServer::check_valid_ddns_request(
-                &ddns_result.signed_payload,
+                &unverified_request,
                 domain_certs,
                 self.conf.max_time_ago_signed_at,
             )
             .context("failed to check signing key request")
             {
-                Ok(_) => {
+                Ok(verified) => {
                     log::info!(
                         "Validated '{}' domain request",
-                        &ddns_result.signed_payload.envelope.payload.name
+                        &unverified_request.signed_payload.envelope.payload.name
                     );
-                    verified_requests.push(&ddns_result.signed_payload.envelope.payload);
+                    verified_requests.push(verified);
                 }
                 Err(e) => {
                     log::error!(
                         "Could not validate '{}' request: {:?}",
-                        &ddns_result.signed_payload.envelope.payload.name,
+                        &unverified_request.signed_payload.envelope.payload.name,
                         e,
                     );
                     errors.failed_signature_checks.push((
-                        ddns_result.signed_payload.envelope.payload.name.to_owned(),
+                        unverified_request
+                            .signed_payload
+                            .envelope
+                            .payload
+                            .name
+                            .to_owned(),
                         e.context("signature did not pass validation"),
                     ));
                 }
@@ -239,72 +312,63 @@ impl<'a> DynDynserServer<'a> {
         verified_requests
     }
 
+    /// Cryptogprahically validates an unverified Ddns request
     fn check_valid_ddns_request(
-        signed_json: &SignedPayload<dns::ResourceRecordSet>,
+        unverified_request: &'a UnverifiedDdnsRequest,
         domain_key_map: &[CertMatch],
         max_time_ago: TimeDelta,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<VerifiedDdnsRequest<'a>, anyhow::Error> {
         /* Look for Matching Key of domain */
         log::info!(
             "looking for key that matches '{}'",
-            &signed_json.envelope.payload.name
+            &unverified_request.signed_payload.envelope.payload.name
         );
-        let vk = domain_key_map
+        let matching_certificate = domain_key_map
             .iter()
-            .find(|x| x.common_name == signed_json.envelope.payload.name)
+            .find(|x| x.common_name == unverified_request.signed_payload.envelope.payload.name)
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Received ddns request for domain '{}', but no matching key could be found",
-                    &signed_json.envelope.payload.name,
+                    &unverified_request.signed_payload.envelope.payload.name,
                 )
             })?;
 
         /* if key is found, try to validate the signature */
-        vk.verifying_key
+
+        matching_certificate
+            .verifying_key
             .verify_strict(
-                &serde_json_canonicalizer::to_vec(&signed_json.envelope)
+                &serde_json_canonicalizer::to_vec(&unverified_request.signed_payload.envelope)
                     .context("failed to re-serialize during signature check")?,
-                signed_json.signature.inner(),
+                unverified_request.signed_payload.signature.inner(),
             )
             .context("ddns json signature did not match")?;
 
-        let signed_at =
-            chrono::DateTime::from_timestamp(signed_json.envelope.signed_at_unix_secs, 0)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("could not construct a timestamp for this envelope")
-                })?;
-
-        let tolerance = chrono::Duration::seconds(15); /* Clock Drift */
-
-        let max_age_permitted = signed_at + max_time_ago + tolerance;
-        let now = chrono::Utc::now();
-        if max_age_permitted < now {
-            anyhow::bail!(
-                "Signature is too old (age: {}s, max: {}s)",
-                (now - signed_at).num_seconds(),
-                max_time_ago.num_seconds(),
-            );
-        }
-        Ok(())
+        unverified_request
+            .validate(matching_certificate.verifying_key, max_time_ago)
+            .context("Did not successfully validate the request")
     }
 
-    fn build_changes(verified_ddns_requests: &[&ResourceRecordSet]) -> Vec<Change> {
+    /// Constructs a Changeset that can be applied to Route53.
+    ///
+    /// This method is functionally pure
+    fn build_changes(verified_ddns_requests: &[VerifiedDdnsRequest]) -> Vec<Change> {
         let mut changes: Vec<Change> = Vec::with_capacity(verified_ddns_requests.len());
         for verified_request in verified_ddns_requests.iter() {
             log::debug!(
                 "processing validated request for '{}'",
-                &verified_request.name
+                &verified_request.resource_record.name
             );
 
             /* if we're working on Domains (i.e. CNAME, A, AAAA, etc), add the trialing dot for FQDN */
-            let record_type = &verified_request.data.record_type();
+            let record_type = &verified_request.resource_record.data.record_type();
             let fixed_name = match record_type {
                 dns::RecordType::A | dns::RecordType::AAAA => {
-                    if verified_request.name.ends_with('.') {
-                        Cow::Borrowed(&verified_request.name)
+                    if verified_request.resource_record.name.ends_with('.') {
+                        Cow::Borrowed(&verified_request.resource_record.name)
                     } else {
                         log::debug!("domain didn't end with '.', adding one ourselves");
-                        let mut owned = verified_request.name.to_owned();
+                        let mut owned = verified_request.resource_record.name.to_owned();
                         owned.push('.');
                         Cow::Owned(owned)
                     }
@@ -315,8 +379,8 @@ impl<'a> DynDynserServer<'a> {
                 action: crate::dns::ChangeAction::Upsert,
                 record_set: crate::dns::ResourceRecordSet {
                     name: fixed_name.into_owned(),
-                    data: verified_request.data.clone(),
-                    ttl: verified_request.ttl,
+                    data: verified_request.resource_record.data.clone(),
+                    ttl: verified_request.resource_record.ttl,
                 },
             };
             changes.push(dns_change);
@@ -325,6 +389,7 @@ impl<'a> DynDynserServer<'a> {
         changes
     }
 
+    /// Applyes the DNS changseset to Route53
     fn commit_changes(&self, changes: &[Change]) -> Result<ChangeInfo, anyhow::Error> {
         let route53_client =
             route53::aws_route53::Route53Client::from_s3_credentials(self.credentials)
@@ -339,8 +404,40 @@ impl<'a> DynDynserServer<'a> {
 
         Ok(change_results)
     }
+
+    /// Deletes the given s3_keys from the configured s3 bucket
+    fn cleanup<I, S>(&self, s3_keys: I, errors: &mut ServerErrors) -> Result<(), anyhow::Error>
+    where
+        I: Iterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let bucket = self.get_s3_bucket().context("failed to get S3 bucket")?;
+
+        for s3_key in s3_keys {
+            match bucket
+                .delete_object(&s3_key)
+                .context("failed to delete S3 Key")
+            {
+                Ok(res) => {
+                    if res.status_code() != 200 {
+                        errors.failed_s3_deletions.push((
+                            s3_key.as_ref().to_string(),
+                            anyhow::anyhow!("got non-200 status code: {}", res.status_code()),
+                        ));
+                        println!("Deleted S3 bucket item {}", s3_key.as_ref());
+                    }
+                }
+                Err(e) => errors
+                    .failed_s3_deletions
+                    .push((s3_key.as_ref().to_string(), e)),
+            }
+        }
+
+        Ok(())
+    }
 }
 
+/// Runs the Server process
 pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error> {
     let conf = ConfigServer::parse(server_args).context("failed to parse server config")?;
 
@@ -403,6 +500,13 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
             "Will write these changes to the DNS records:\n\n```json\n{:?}\n```",
             changes
         );
+        println!(
+            "Will delete the following keys from the s3 bucket:\n{:?}",
+            unverified_ddns_requests
+                .iter()
+                .map(|x| &x.s3_key)
+                .collect::<Vec<_>>(),
+        );
         return Ok(());
     }
 
@@ -416,16 +520,23 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
         change_results.id, change_results.status
     );
 
+    log::info!("Claning up used and invalid ddns request keys");
+    dyndynser
+        .cleanup(verified_ddns_requests.iter().map(|v| v.s3_key), &mut errors)
+        .context("failed to cleanup s3 ddns.json items")?;
+
     /* trigger a ddns request automatically via a Process Command */
 
     errors.print_summary()
 }
 
+/// Holds non-blocking errors encountered during the Server process, so that the process updates what it can update, and doesn't self-DOS in the case of bad or outdated data
 struct ServerErrors {
     failed_s3_fetches: Vec<(String, anyhow::Error)>,
     failed_json_parses: Vec<(String, anyhow::Error)>,
     failed_key_parses: Vec<(String, anyhow::Error)>,
     failed_signature_checks: Vec<(String, anyhow::Error)>,
+    failed_s3_deletions: Vec<(String, anyhow::Error)>,
 }
 
 impl ServerErrors {
@@ -435,16 +546,20 @@ impl ServerErrors {
             failed_key_parses: Vec::new(),
             failed_s3_fetches: Vec::new(),
             failed_signature_checks: Vec::new(),
+            failed_s3_deletions: Vec::new(),
         }
     }
 
+    /// Returns `true` if any of the error vecs is not empty
     fn has_errors(&self) -> bool {
         !self.failed_s3_fetches.is_empty()
             || !self.failed_json_parses.is_empty()
             || !self.failed_key_parses.is_empty()
             || !self.failed_signature_checks.is_empty()
+            || !self.failed_s3_deletions.is_empty()
     }
 
+    /// Prints the summary of errors found for the user to remedy, or the Success string if no errors
     fn print_summary(&self) -> Result<(), anyhow::Error> {
         println!("Errors Summary\n-------");
         if self.has_errors() {
@@ -472,6 +587,12 @@ impl ServerErrors {
                     println!("\t *{}: {:#?}", fail.0, fail.1);
                 }
             }
+            if !self.failed_s3_deletions.is_empty() {
+                println!("Failed S3 Deletions:");
+                for fail in &self.failed_s3_deletions {
+                    println!("\t *{}: {:#?}", fail.0, fail.1);
+                }
+            }
             Err(anyhow::anyhow!(
                 "errors occurred while executing this dyndynser run"
             ))
@@ -489,7 +610,7 @@ mod test {
     use crate::{
         dns::{self, ResourceRecordSet},
         keys::{load_ed25519_certificate_pem, read_file_limited},
-        server::DynDynserServer,
+        server::{DynDynserServer, UnverifiedDdnsRequest},
         signatures::{SignableEnvelope, SignedPayload},
     };
 
@@ -539,8 +660,13 @@ mod test {
             "expected cert.common_name to be same as the reserded_bytes domain request"
         );
 
+        let unverified = UnverifiedDdnsRequest {
+            s3_key: "some_key".into(),
+            signed_payload: reserded_bytes,
+        };
+
         let res = DynDynserServer::check_valid_ddns_request(
-            &reserded_bytes,
+            &unverified,
             &vec![cert],
             chrono::TimeDelta::seconds(60),
         );
