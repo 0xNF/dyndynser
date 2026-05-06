@@ -207,7 +207,7 @@ impl<'a> DynDynserServer<'a> {
                     Err(e) => {
                         errors.failed_s3_fetches.push((
                             x.key.clone().into(),
-                            anyhow::Error::from(e).context(format!("failed to Get S3 Object")),
+                            anyhow::Error::from(e).context("failed to Get S3 Object"),
                         ));
                     }
                 }
@@ -299,7 +299,7 @@ impl<'a> DynDynserServer<'a> {
                 &unverified_request.signed_payload.envelope.payload.name
             );
             match DynDynserServer::check_valid_ddns_request(
-                &unverified_request,
+                unverified_request,
                 domain_certs,
                 self.conf.max_time_ago_signed_at,
             )
@@ -428,11 +428,7 @@ impl<'a> DynDynserServer<'a> {
     }
 
     /// Deletes the given s3_keys from the configured s3 bucket
-    fn cleanup<'b>(
-        &self,
-        s3_keys: Vec<S3Key>,
-        errors: &mut ServerErrors,
-    ) -> Result<(), anyhow::Error> {
+    fn cleanup(&self, s3_keys: Vec<S3Key>, errors: &mut ServerErrors) -> Result<(), anyhow::Error> {
         let bucket = self.get_s3_bucket().context("failed to get S3 bucket")?;
 
         for s3_key in s3_keys {
@@ -703,7 +699,7 @@ mod test {
 
         let res = DynDynserServer::check_valid_ddns_request(
             &unverified,
-            &vec![cert],
+            &[cert],
             chrono::TimeDelta::seconds(60),
         );
         assert!(res.is_ok(), "expected signature to pass validation");

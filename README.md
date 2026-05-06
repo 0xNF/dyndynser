@@ -95,7 +95,6 @@ cargo build
   * EC2 Instance Role with IAM priveliges for `s3:read` from your bucket of choice
   * EC2 Instance Role with IAM privelides for `route53:read,write` to your main domain 
 * An X.509 Certificate with a `CN` equal to the FQDN of the domain to update, and Key Usages of `Digital Signature`, `Non Repudiation`.
-* [ddns-route53](https://github.com/crazy-max/ddns-route53) with a filled-out `ddns-route53.yaml` file
 
 
 # Usage
@@ -158,9 +157,11 @@ Options:
       --key-path <KEY_PATH>
           Path to the PEM-encoded Ed25519 private key file for signing
       --signing-key-password <SIGNING_KEY_PASSWORD>
-          Passphrase to decrypt the private key (omit if the key is not encrypted) [env: DYNDYNSER__SIGNING_KEY_PASSWORD=]
+          Passphrase to decrypt the private key (omit if the key is not encrypted) [env: DYNDYNSER_SIGNING_KEY_PASSWORD=]
       --aws-region <AWS_REGION>
-          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER__AWS_REGION=]
+          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER_AWS_REGION=]
+      --ip-addr-check-url <IP_ADDR_CHECK_URL>
+          URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6
   -h, --help
           Print help
 ```
@@ -203,8 +204,8 @@ aws s3api list-objects-v2 --bucket $s3bucket
 
 ## Server
 
-The server side is architected such that many errors are non-blocking. The only things that are show-stoppers are if S3 can't be contacted, or if the ddns_route53 file does not exist.
-Other errors, such as malformed JSON ddns requests, malformed keys, or mismatched signatures, only cause errors to be reported, but do not terminate the program.
+The server side is architected such that many errors are non-blocking. The only things that are show-stoppers are if S3 or Route53 can't be contacted.
+Other errors, such as malformed JSON ddns requests, malformed keys, or mismatched signatures, only cause those errors to be reported, but do not terminate the program.
 
 This is so that invalid configurations by the client can't DOS the service, and records will continue to be updated.
 
@@ -219,21 +220,25 @@ sudo chmod +rw -R /etc/dyndynser
 ```bash
 dyndynser server --help
 
-Usage: dyndynser server [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --ddns-config-file <DDNS_FILE_PATH> --keys-search-path <KEYS_SEARCH_PATH> --aws-region <AWS_REGION>
+Run in server mode, processing and validating DDNS update requests stored in S3. The server verifies cryptographic signatures on each request against a set of trusted public keys before applying any DNS record changes
+
+Usage: dyndynser server [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --hosted-zone-id <HOSTED_DNS_ZONE_ID> --keys-search-path <KEYS_SEARCH_PATH> --aws-region <AWS_REGION>
 
 Options:
       --dry-run
-          Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything ti Route53. Will print what would otherwise be updated.
+          Simulate all operations without writing any DNS changes to Route53. Will print what would otherwise be updated.
       --bucket <S3_BUCKET>
           S3 bucket name used as the DDNS backend
       --bucket-ddns-dir <S3_DDNS_JSON_DIR>
           S3 key prefix (directory) for pending DDNS update JSON files
-      --ddns-config-file <DDNS_FILE_PATH>
-          Path to the local ddns-route53.yaml configuration file
+      --hosted-zone-id <HOSTED_DNS_ZONE_ID>
+          Id of the Local Hosted DNS Zone [env: DYNDYNSER_AWS_HOSTED_ZONE_ID=]
       --keys-search-path <KEYS_SEARCH_PATH>
           Directory to search for trusted public key files used in signature verification
       --aws-region <AWS_REGION>
-          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER__AWS_REGION=]
+          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER_AWS_REGION=]
+      --max-signed-at-time-ago <MAX_TIME_AGO_SIGNED_AT_SECS>
+          Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale
   -h, --help
           Print help
 ```

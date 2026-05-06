@@ -28,7 +28,7 @@ pub enum SubCommands {
 pub struct ServerArgs {
     #[arg(
         long = "dry-run",
-        help = "Simulate all operations without writing any DNS changes to either the local ddns-route53.yaml conf, or pushing anything to Route53. Will print what would otherwise be updated."
+        help = "Simulate all operations without writing any DNS changes to Route53. Will print what would otherwise be updated."
     )]
     pub is_dry_run: bool,
 
