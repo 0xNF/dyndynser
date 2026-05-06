@@ -112,7 +112,7 @@ pub struct ClientArgs {
     #[arg(
         long = "aws-region",
         help = "AWS region of the S3 bucket (e.g. eu-west-1)",
-        env = "DYNDYNSER_AWS_REGION"
+        env = "AWS_DEFAULT_REGION"
     )]
     pub aws_region: String,
 
