@@ -82,7 +82,7 @@ where
         }
     }
 
-    // Signs anything that be JSON-serialized with the given signing key, producing a new object which contains the signature, and the object that was signed
+    /// Signs anything that be JSON-serialized with the given signing key, producing a new object which contains the signature, and the object that was signed
     pub fn sign(
         mut self,
         signing_key: &ed25519_dalek::SigningKey,

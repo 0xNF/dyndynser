@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, str::FromStr as _};
 
-// Returns the HMAC SHA256 of the data
+/// Returns the HMAC SHA256 of the data
 fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     let mut mac =
         <Hmac<Sha256> as hmac::KeyInit>::new_from_slice(key).expect("HMAC accepts any key length");
@@ -12,7 +12,7 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     mac.finalize().into_bytes().into()
 }
 
-// Returns the hex-encoded SHA256 hashed bytes of data
+/// Returns the hex-encoded SHA256 hashed bytes of data
 fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
 }
@@ -122,7 +122,7 @@ pub fn aws_sigv4_headers(
     hdrs
 }
 
-// Convert BTreeMap → reqwest HeaderMap
+/// Convert BTreeMap → reqwest HeaderMap
 pub fn to_header_map(map: &BTreeMap<String, String>) -> Result<HeaderMap, anyhow::Error> {
     let mut hm = HeaderMap::new();
     for (k, v) in map {

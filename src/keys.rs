@@ -16,7 +16,7 @@ pub struct CertMatch {
     pub verifying_key: VerifyingKey,
 }
 
-// Parses the given bytes as an X.509 Certificate PEM file and extracts the CommonName / Public Key from it
+/// Parses the given bytes as an X.509 Certificate PEM file and extracts the CommonName / Public Key from it
 pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyhow::Error> {
     let cert_bytes = cert_bytes.trim_ascii();
     let cert = Certificate::from_pem(cert_bytes)
@@ -64,8 +64,8 @@ pub fn load_ed25519_certificate_pem(cert_bytes: &[u8]) -> Result<CertMatch, anyh
     Ok(certmatch)
 }
 
-// Parses the given bytes as an Ed25519 formatted private key
-// Takes an optional Password in case this key is encrypted
+/// Parses the given bytes as an Ed25519 formatted private key
+/// Takes an optional Password in case this key is encrypted
 pub fn load_ed25519_private_key(
     key_bytes: &[u8],
     key_password: Option<&str>,
@@ -84,8 +84,8 @@ pub fn load_ed25519_private_key(
     Ok(signing_key)
 }
 
-// Parses the given bytes as an Ed25519 formatted OpenSSH private key
-// Takes an optional Password in case this key is encrypted
+/// Parses the given bytes as an Ed25519 formatted OpenSSH private key
+/// Takes an optional Password in case this key is encrypted
 fn load_ed25519_openssh_private_key(
     key_bytes: &[u8],
     key_password: Option<&str>,
@@ -121,14 +121,14 @@ fn load_ed25519_openssh_private_key(
     Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
 }
 
-// Parses the given bytes as an OpenSSL ED25519 formatted private key
+/// Parses the given bytes as an OpenSSL ED25519 formatted private key
 fn load_ed25519_openssl_key(key_bytes: &[u8]) -> Result<ed25519_dalek::SigningKey, anyhow::Error> {
     let s: &str = std::str::from_utf8(key_bytes).context("not a valid utf8 string")?;
     ed25519_dalek::SigningKey::from_pkcs8_pem(s)
         .context("failed to decode pkcs8 pem bytes from signing key")
 }
 
-// Reads a maximum of `max_bytes` from the given File Path
+/// Reads a maximum of `max_bytes` from the given File Path
 pub fn read_file_limited<P: AsRef<Path>>(
     path: P,
     max_bytes: u64,

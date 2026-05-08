@@ -48,7 +48,7 @@ impl<'a> Route53Client<'a> {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("credentials missing secret_key"))?;
 
-        // rust-s3 may use either field depending on credential source / version
+        /* rust-s3 may use either field depending on credential source / version */
         let session_token = creds
             .security_token
             .as_deref()

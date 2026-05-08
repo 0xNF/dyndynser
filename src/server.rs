@@ -211,10 +211,10 @@ impl<'a> DynDynserServer<'a> {
                         ));
                     }
                 }
-                // process each object
+                /* process each object */
             }
 
-            // Check if there are more pages
+            /* Check if there are more pages */
             match list_result.next_continuation_token {
                 Some(token) => continuation_token = Some(token),
                 None => break,
@@ -229,7 +229,6 @@ impl<'a> DynDynserServer<'a> {
     fn get_public_key_map(
         &self,
         errors: &mut ServerErrors,
-        // results: &mut RunResults,
     ) -> Result<Vec<CertMatch>, anyhow::Error> {
         let mut v: Vec<CertMatch> = Vec::new();
 

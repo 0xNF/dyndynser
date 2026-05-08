@@ -18,34 +18,34 @@ impl DomainName {
     /// If a Some, then it is valid. if not, then it is invalid
     pub fn parse(domain_name: &'_ str) -> Result<DomainName, anyhow::Error> {
         let domain_name = domain_name.trim().to_lowercase();
-        // Must not be empty and must fit within 253 characters
+        /*  Must not be empty and must fit within 253 characters */
         if domain_name.is_empty() || domain_name.len() > 253 {
             anyhow::bail!("domain must be between 1 and 253 ascii chars");
         }
 
-        // Allow optional trailing dot (e.g. "example.com.")
+        /* Allow optional trailing dot (e.g. "example.com.") */
         let domain = domain_name.strip_suffix('.').unwrap_or(&domain_name);
 
         let labels: Vec<&str> = domain.split('.').collect();
 
         for label in &labels {
-            // Each label must be between 1 and 63 characters
+            /* Each label must be between 1 and 63 characters */
             if label.is_empty() || label.len() > 63 {
                 anyhow::bail!("domain sub-labels must be between 1-63 characters");
             }
 
-            // Labels cannot start or end with a hyphen
+            /* Labels cannot start or end with a hyphen */
             if label.starts_with('-') || label.ends_with('-') {
                 anyhow::bail!("domain sub-label cannot start or end with a hyphen");
             }
 
-            // Labels may only contain ASCII alphanumeric characters and hyphens
+            /* Labels may only contain ASCII alphanumeric characters and hyphens */
             if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                 anyhow::bail!("domain sub-label must only be ascii alphanumeric");
             }
         }
 
-        // The TLD (last label) must not be entirely numeric (e.g. ".123" is invalid)
+        /* The TLD (last label) must not be entirely numeric (e.g. ".123" is invalid) */
         if labels
             .last()
             .is_some_and(|tld| tld.chars().all(|c| c.is_ascii_digit()))
