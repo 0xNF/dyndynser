@@ -16,12 +16,12 @@ pub struct DynDynserClient<'a> {
 }
 
 impl<'a> DynDynserClient<'a> {
-    // Constructs a DyndynserClient with the given config
+    /// Constructs a DyndynserClient with the given config
     pub fn with_config(conf: &'a ConfigClient) -> Self {
         Self { conf }
     }
 
-    // Queries a canonical Amazon AWS url for the IP of the machine running this binary
+    /// Queries a canonical Amazon AWS url for the IP of the machine running this binary
     fn query_for_ip(&self) -> Result<std::net::IpAddr, anyhow::Error> {
         let res = reqwest::blocking::get(&self.conf.ip_addr_check_url)
             .context("failed to check IP address")?;
@@ -47,7 +47,7 @@ impl<'a> DynDynserClient<'a> {
     }
 }
 
-// In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
+/// In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
 pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     log::info!("parsing Client Config");
     let conf = ConfigClient::parse(args).context("failed to parse Client config")?;
