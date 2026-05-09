@@ -51,6 +51,19 @@ pub struct ServerArgs {
         long = "keys-search-path",
         help = "Directory to search for trusted public key files used in signature verification"
     )]
+    #[cfg_attr(
+        target_os = "linux",
+        arg(default_value = "/usr/local/share/ca-certificates")
+    )]
+    #[cfg_attr(
+        any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ),
+        arg(default_value = "/usr/local/etc/ssl/certs/")
+    )]
     pub keys_search_path: String,
 
     #[arg(
