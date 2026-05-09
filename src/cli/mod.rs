@@ -103,9 +103,10 @@ pub struct ServerArgs {
 
     #[arg(
         long = "max-signed-at-time-ago",
-        help = "Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale"
+        help = "Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale",
+        default_value_t = 60 * 60
     )]
-    pub max_time_ago_signed_at_secs: Option<u32>,
+    pub max_time_ago_signed_at_secs: u32,
 
     #[arg(
         long = "drop-user",

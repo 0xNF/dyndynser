@@ -193,12 +193,8 @@ pub struct ConfigServer {
 
 impl ConfigServer {
     pub fn parse(args: ServerArgs) -> Result<Self, anyhow::Error> {
-        let max_time_ago_signed_at = args
-            .max_time_ago_signed_at_secs
-            .map_or(chrono::TimeDelta::hours(1), |secs| {
-                chrono::TimeDelta::seconds(secs as i64)
-            });
-
+        let max_time_ago_signed_at =
+            chrono::TimeDelta::seconds(args.max_time_ago_signed_at_secs as i64);
         let aws_config = AWSCliConfig {
             region: args.aws_region,
             access_key_id: args.aws_access_key_id,
