@@ -160,9 +160,15 @@ Options:
       --signing-key-password <SIGNING_KEY_PASSWORD>
           Passphrase to decrypt the private key (omit if the key is not encrypted) [env: DYNDYNSER_SIGNING_KEY_PASSWORD=]
       --aws-region <AWS_REGION>
-          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER_AWS_REGION=]
+          AWS region of the S3 bucket (e.g. eu-east-1) [env: AWS_REGION=us-east-1]
+      --aws-access-key-id <AWS_ACCESS_KEY_ID>
+          AWS Access Key Id [env: AWS_ACCESS_KEY_ID==********]
+      --aws-secret-access-key <AWS_SECRET_ACCESS_KEY>
+          AWS Secret Access Key [env: AWS_SECRET_ACCESS_KEY==********]
       --ip-addr-check-url <IP_ADDR_CHECK_URL>
           URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6
+      --drop-user <DROP_USER>
+          user to drop down to after priveliged operations are over [default: nobody]
   -h, --help
           Print help
 ```
@@ -223,7 +229,7 @@ dyndynser server --help
 
 Run in server mode, processing and validating DDNS update requests stored in S3. The server verifies cryptographic signatures on each request against a set of trusted public keys before applying any DNS record changes
 
-Usage: dyndynser server [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --hosted-zone-id <HOSTED_DNS_ZONE_ID> --keys-search-path <KEYS_SEARCH_PATH> --aws-region <AWS_REGION>
+Usage: dyndynser server [OPTIONS] --bucket <S3_BUCKET> --bucket-ddns-dir <S3_DDNS_JSON_DIR> --hosted-zone-id <HOSTED_DNS_ZONE_ID> --aws-region <AWS_REGION>
 
 Options:
       --dry-run
@@ -235,11 +241,17 @@ Options:
       --hosted-zone-id <HOSTED_DNS_ZONE_ID>
           Id of the Local Hosted DNS Zone [env: DYNDYNSER_AWS_HOSTED_ZONE_ID=]
       --keys-search-path <KEYS_SEARCH_PATH>
-          Directory to search for trusted public key files used in signature verification
+          Directory to search for trusted public key files used in signature verification [default: /usr/local/share/ca-certificates]
       --aws-region <AWS_REGION>
-          AWS region of the S3 bucket (e.g. eu-west-1) [env: DYNDYNSER_AWS_REGION=]
+          AWS region of the S3 bucket (e.g. eu-east-1) [env: AWS_REGION=us-east-1]
+      --aws-access-key-id <AWS_ACCESS_KEY_ID>
+          AWS Access Key Id [env: AWS_ACCESS_KEY_ID=********]
+      --aws-secret-access-key <AWS_SECRET_ACCESS_KEY>
+          AWS Secret Access Key [env: AWS_SECRET_ACCESS_KEY==********]
       --max-signed-at-time-ago <MAX_TIME_AGO_SIGNED_AT_SECS>
           Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale
+      --drop-user <DROP_USER>
+          user to drop down to after priveliged operations are over [default: nobody]
   -h, --help
           Print help
 ```
