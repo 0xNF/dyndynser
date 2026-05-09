@@ -116,6 +116,9 @@ pub struct ConfigClient {
     /// Path on filesystem to search for a private ed25519 key to sign with
     pub key_path: String,
 
+    /// Optional password in case the key is encrypted
+    pub signing_key_password: Option<String>,
+
     /// whether this run should make mutating changes or not
     pub is_dry_run: bool,
 
@@ -129,52 +132,34 @@ pub struct ConfigClient {
 impl ConfigClient {
     const DEFAULT_IP_CHECK_URL: &str = "https://checkip.amazonaws.com";
 
-    pub fn parse(args: &cli::ClientArgs) -> Result<Self, anyhow::Error> {
-        let s3_bucket = args.s3_bucket.trim();
-        let key_path = args.key_path.trim();
-        let region = args.aws_region.trim();
-        let ddns_json_dir = args.s3_ddns_json_dir.trim();
+    pub fn parse(args: cli::ClientArgs) -> Result<Self, anyhow::Error> {
         let ttl: Option<Duration> = args.ttl.map(|t| Duration::from_secs(t as u64));
         let ip_addr_check_url = args
             .ip_addr_check_url
             .as_deref()
             .unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
-        let aws_access_key_id = args.aws_access_key_id.as_deref().map(|x| x.trim());
-        let aws_secret_access_key = args.aws_secret_access_key.as_deref().map(|x| x.trim());
-
-        /* Check Empties */
-        if s3_bucket.is_empty() {
-            anyhow::bail!("S3 Bucket cannot be empty")
-        } else if key_path.is_empty() {
-            anyhow::bail!("keypath to sign with cannot be empty")
-        } else if region.is_empty() {
-            anyhow::bail!("Amazon Region cannot be empty")
-        } else if ddns_json_dir.is_empty() {
-            anyhow::bail!("s3 bucket ddns json path cannot be empty")
-        } else if ip_addr_check_url.is_empty() {
-            anyhow::bail!("ip check addr cannot be empty")
-        }
 
         /* Check Domain is valid */
         let domain = DomainName::parse(&args.domain)
             .context("domain is invalid, must conform to RFC 1123")?;
 
         let aws_config = AWSCliConfig {
-            region: region.to_owned(),
-            access_key_id: aws_access_key_id.map(|x| x.to_owned()),
-            secret_access_key: aws_secret_access_key.map(|x| x.to_owned()),
+            region: args.aws_region.to_owned(),
+            access_key_id: args.aws_access_key_id,
+            secret_access_key: args.aws_secret_access_key,
         };
 
         Ok(ConfigClient {
             is_dry_run: args.is_dry_run,
             domain,
             ttl,
-            key_path: key_path.to_owned(),
-            s3_bucket: s3_bucket.to_owned(),
-            s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
+            key_path: args.key_path,
+            s3_bucket: args.s3_bucket,
+            s3_bucket_ddns_json_directory: args.s3_ddns_json_dir,
             ip_addr_check_url: ip_addr_check_url.to_owned(),
+            signing_key_password: args.signing_key_password,
             aws_config,
-            drop_user: args.drop_user.to_owned(),
+            drop_user: args.drop_user,
         })
     }
 }

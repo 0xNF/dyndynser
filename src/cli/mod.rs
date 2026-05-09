@@ -1,5 +1,13 @@
 use clap::{Parser, Subcommand};
 
+fn trimmed_string(s: &str) -> Result<String, String> {
+    let trimmed = s.trim().to_string();
+    if trimmed.is_empty() {
+        Err(String::from("value cannot be empty or whitespace-only"))
+    } else {
+        Ok(trimmed)
+    }
+}
 #[derive(Parser)]
 #[command(
     version,
@@ -32,24 +40,27 @@ pub struct ServerArgs {
     )]
     pub is_dry_run: bool,
 
-    #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend")]
+    #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend", value_parser = trimmed_string)]
     pub s3_bucket: String,
     #[arg(
         long = "bucket-ddns-dir",
-        help = "S3 key prefix (directory) for pending DDNS update JSON files"
+        help = "S3 key prefix (directory) for pending DDNS update JSON files",
+        value_parser = trimmed_string
     )]
     pub s3_ddns_json_dir: String,
 
     #[arg(
         long = "hosted-zone-id",
         help = "Id of the Local Hosted DNS Zone",
-        env = "DYNDYNSER_AWS_HOSTED_ZONE_ID"
+        env = "DYNDYNSER_AWS_HOSTED_ZONE_ID",
+        value_parser = trimmed_string
     )]
     pub hosted_dns_zone_id: String,
 
     #[arg(
         long = "keys-search-path",
-        help = "Directory to search for trusted public key files used in signature verification"
+        help = "Directory to search for trusted public key files used in signature verification",
+        value_parser = trimmed_string
     )]
     #[cfg_attr(
         target_os = "linux",
@@ -69,21 +80,24 @@ pub struct ServerArgs {
     #[arg(
         long = "aws-region",
         help = "AWS region of the S3 bucket (e.g. eu-east-1)",
-        env = "AWS_REGION"
+        env = "AWS_REGION",
+        value_parser = trimmed_string
     )]
     pub aws_region: String,
 
     #[arg(
         long = "aws-access-key-id",
         help = "AWS Access Key Id",
-        env = "AWS_ACCESS_KEY_ID"
+        env = "AWS_ACCESS_KEY_ID",
+        value_parser = trimmed_string
     )]
     pub aws_access_key_id: Option<String>,
 
     #[arg(
         long = "aws-secret-access-key",
         help = "AWS Secret Access Key",
-        env = "AWS_SECRET_ACCESS_KEY"
+        env = "AWS_SECRET_ACCESS_KEY",
+        value_parser = trimmed_string
     )]
     pub aws_secret_access_key: Option<String>,
 
@@ -96,7 +110,8 @@ pub struct ServerArgs {
     #[arg(
         long = "drop-user",
         help = "user to drop down to after priveliged operations are over",
-        default_value = "nobody"
+        default_value = "nobody",
+        value_parser = trimmed_string
     )]
     pub drop_user: String,
 }
@@ -109,18 +124,24 @@ pub struct ClientArgs {
     )]
     pub is_dry_run: bool,
 
-    #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend")]
+    #[arg(
+        long = "bucket",
+        help = "S3 bucket name used as the DDNS backend",
+        value_parser = trimmed_string
+    )]
     pub s3_bucket: String,
 
     #[arg(
         long = "bucket-ddns-dir",
-        help = "S3 key prefix (directory) for pending DDNS update JSON files"
+        help = "S3 key prefix (directory) for pending DDNS update JSON files",
+        value_parser = trimmed_string
     )]
     pub s3_ddns_json_dir: String,
 
     #[arg(
         long = "domain",
-        help = "Fully-qualified domain name to update (e.g. home.example.com)"
+        help = "Fully-qualified domain name to update (e.g. home.example.com)",
+        value_parser = trimmed_string
     )]
     pub domain: String,
 
@@ -132,48 +153,55 @@ pub struct ClientArgs {
 
     #[arg(
         long = "key-path",
-        help = "Path to the PEM-encoded Ed25519 private key file for signing"
+        help = "Path to the PEM-encoded Ed25519 private key file for signing",
+        value_parser = trimmed_string
     )]
     pub key_path: String,
 
     #[arg(
         long,
         help = "Passphrase to decrypt the private key (omit if the key is not encrypted)",
-        env = "DYNDYNSER_SIGNING_KEY_PASSWORD"
+        env = "DYNDYNSER_SIGNING_KEY_PASSWORD",
+        value_parser = trimmed_string
     )]
     pub signing_key_password: Option<String>,
 
     #[arg(
         long = "aws-region",
         help = "AWS region of the S3 bucket (e.g. eu-east-1)",
-        env = "AWS_REGION"
+        env = "AWS_REGION",
+        value_parser = trimmed_string
     )]
     pub aws_region: String,
 
     #[arg(
         long = "aws-access-key-id",
         help = "AWS Access Key Id",
-        env = "AWS_ACCESS_KEY_ID"
+        env = "AWS_ACCESS_KEY_ID",
+        value_parser = trimmed_string
     )]
     pub aws_access_key_id: Option<String>,
 
     #[arg(
         long = "aws-secret-access-key",
         help = "AWS Secret Access Key",
-        env = "AWS_SECRET_ACCESS_KEY"
+        env = "AWS_SECRET_ACCESS_KEY",
+        value_parser = trimmed_string
     )]
     pub aws_secret_access_key: Option<String>,
 
     #[arg(
         long = "ip-addr-check-url",
-        help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6"
+        help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6",
+        value_parser = trimmed_string
     )]
     pub ip_addr_check_url: Option<String>,
 
     #[arg(
         long = "drop-user",
         help = "user to drop down to after priveliged operations are over",
-        default_value = "nobody"
+        default_value = "nobody",
+        value_parser = trimmed_string
     )]
     pub drop_user: String,
 }

@@ -49,7 +49,7 @@ impl<'a> DynDynserClient<'a> {
 }
 
 /// In client mode, we query the IP of the running machine, create and sign a DDNS payload object for the domain, then push it to S3
-pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
+pub fn handle_client(args: cli::ClientArgs) -> Result<(), anyhow::Error> {
     log::info!("parsing Client Config");
     let conf = ConfigClient::parse(args).context("failed to parse Client config")?;
 
@@ -76,7 +76,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
     log::info!("Priveliged operations are over, attempting to drop privs now");
     unix::maybe_drop_privileges(&conf.drop_user).context("failed to drop privileges")?;
     let signing_key =
-        keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
+        keys::load_ed25519_private_key(&key_bytes, conf.signing_key_password.as_deref())?;
 
     /* Get IP */
     log::info!("Querying for machine's IP addr");
