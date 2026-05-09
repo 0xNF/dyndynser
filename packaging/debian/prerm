@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|purge|upgrade|deconfigure|failed-upgrade)
+        # invoke-rc.d is the policy-compliant abstraction over all init systems;
+        # never call systemctl directly in maintainer scripts.
+        if command -v invoke-rc.d >/dev/null 2>&1; then
+            invoke-rc.d dyndynser stop 2>/dev/null || true
+        fi
+        ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,32 @@
+.TH DYNDYNSER 1 "2024-01-01" "dyndynser 1.1.0" "User Commands"
+.SH NAME
+dyndynser \- distributed cryptographically-signed DDNS updater
+.SH SYNOPSIS
+.B dyndynser
+[\fIOPTIONS\fR] \fICOMMAND\fR
+.SH DESCRIPTION
+.B dyndynser
+provides server and client components for performing distributed DNS
+updates over AWS EC2 and Route53.
+.PP
+Updates are cryptographically signed using ed25519 keys backed by
+X.509 public certificates, ensuring only authorised clients can
+modify DNS records.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help and exit.
+.TP
+.BR \-V ", " \-\-version
+Display version and exit.
+.SH FILES
+.TP
+.I /etc/dyndynser/
+Configuration directory. Owned by
+.BR root : dyndynser
+with mode
+.BR 0770 .
+.SH AUTHOR
+0xNF <github@winetech.com>
+.SH SEE ALSO
+Project homepage: https://github.com/0xnf/dyndynser

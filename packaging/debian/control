@@ -1,0 +1,16 @@
+Package: dyndynser
+Source: dyndynser
+Version: 1.1.0
+Architecture: amd64
+Maintainer: 0xNF <github@winetech.com>
+Depends: libc6 (>= 2.17), libgcc-s1 (>= 3.0)
+Section: net
+Priority: standard
+Homepage: https://github.com/0xnf/dyndynser
+Description: distributed cryptographically-signed DDNS updater
+ dyndynser provides server and client components for performing
+ distributed DNS updates over AWS EC2 and Route53.
+ .
+ Updates are cryptographically signed using ed25519 keys backed by
+ X.509 public certificates, ensuring only authorised clients can
+ modify DNS records.

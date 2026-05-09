@@ -1,0 +1,39 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        # --- Dyndynser Group ---
+        if ! getent group dyndynser >/dev/null 2>&1; then
+            groupadd --system dyndynser
+        fi
+
+        # --- Dyndynser User ---
+        if ! getent passwd dyndynser >/dev/null 2>&1; then
+            useradd \
+                --system \
+                --gid dyndynser \
+                --no-create-home \
+                --home-dir /nonexistent \
+                --shell /usr/sbin/nologin \
+                --comment "dyndynser daemon" \
+                dyndynser
+        fi
+
+        # --- /etc/dyndynser ---
+        # Directory is created by the package; fix ownership + perms here
+        # because the dyndynser group doesn't exist until the lines above.
+        chown root:dyndynser /etc/dyndynser
+        chmod 770            /etc/dyndynser
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
