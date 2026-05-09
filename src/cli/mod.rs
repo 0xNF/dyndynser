@@ -55,10 +55,24 @@ pub struct ServerArgs {
 
     #[arg(
         long = "aws-region",
-        help = "AWS region of the S3 bucket (e.g. eu-west-1)",
-        env = "DYNDYNSER_AWS_REGION"
+        help = "AWS region of the S3 bucket (e.g. eu-east-1)",
+        env = "AWS_REGION"
     )]
     pub aws_region: String,
+
+    #[arg(
+        long = "aws-access-key-id",
+        help = "AWS Access Key Id",
+        env = "AWS_ACCESS_KEY_ID"
+    )]
+    pub aws_access_key_id: Option<String>,
+
+    #[arg(
+        long = "aws-secret-access-key",
+        help = "AWS Secret Access Key",
+        env = "AWS_SECRET_ACCESS_KEY"
+    )]
+    pub aws_secret_access_key: Option<String>,
 
     #[arg(
         long = "max-signed-at-time-ago",
@@ -111,10 +125,24 @@ pub struct ClientArgs {
 
     #[arg(
         long = "aws-region",
-        help = "AWS region of the S3 bucket (e.g. eu-west-1)",
-        env = "AWS_DEFAULT_REGION"
+        help = "AWS region of the S3 bucket (e.g. eu-east-1)",
+        env = "AWS_REGION"
     )]
     pub aws_region: String,
+
+    #[arg(
+        long = "aws-access-key-id",
+        help = "AWS Access Key Id",
+        env = "AWS_ACCESS_KEY_ID"
+    )]
+    pub aws_access_key_id: Option<String>,
+
+    #[arg(
+        long = "aws-secret-access-key",
+        help = "AWS Secret Access Key",
+        env = "AWS_SECRET_ACCESS_KEY"
+    )]
+    pub aws_secret_access_key: Option<String>,
 
     #[arg(
         long = "ip-addr-check-url",

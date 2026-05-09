@@ -103,6 +103,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
         log::info!("Invoking S3 for file upload");
 
         let region = conf
+            .aws_config
             .region
             .parse()
             .context("invalid AWS region found during S3 write")?;

@@ -66,15 +66,24 @@ impl Deref for DomainName {
 }
 
 #[derive(Debug)]
+pub struct AWSCliConfig {
+    /// AWS Region, like us-east-1
+    pub region: String,
+
+    /// AWS Access Key Id. Ootional, may use the default settings from the EC2 instance role
+    pub access_key_id: Option<String>,
+
+    /// AWS Secret Key. Ootional, may use the default settings from the EC2 instance role
+    pub secret_access_key: Option<String>,
+}
+
+#[derive(Debug)]
 pub struct ConfigClient {
     /// S3 Bucket id to push $domain.json files
     pub s3_bucket: String,
 
     /// Path on the S3 bucket to place -ddns.json files
     pub s3_bucket_ddns_json_directory: String,
-
-    /// AWS Region, like us-east-1
-    pub region: String,
 
     /// Domain that this client is configured to push for
     pub domain: DomainName,
@@ -90,6 +99,9 @@ pub struct ConfigClient {
 
     /// whether this run should make mutating changes or not
     pub is_dry_run: bool,
+
+    /// Holds AWS CLi configuration like credentials and servers
+    pub aws_config: AWSCliConfig,
 }
 
 impl ConfigClient {
@@ -105,6 +117,8 @@ impl ConfigClient {
             .ip_addr_check_url
             .as_deref()
             .unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
+        let aws_access_key_id = args.aws_access_key_id.as_deref().map(|x| x.trim());
+        let aws_secret_access_key = args.aws_secret_access_key.as_deref().map(|x| x.trim());
 
         /* Check Empties */
         if s3_bucket.is_empty() {
@@ -123,6 +137,12 @@ impl ConfigClient {
         let domain = DomainName::parse(&args.domain)
             .context("domain is invalid, must conform to RFC 1123")?;
 
+        let aws_config = AWSCliConfig {
+            region: region.to_owned(),
+            access_key_id: aws_access_key_id.map(|x| x.to_owned()),
+            secret_access_key: aws_secret_access_key.map(|x| x.to_owned()),
+        };
+
         Ok(ConfigClient {
             is_dry_run: args.is_dry_run,
             domain,
@@ -130,8 +150,8 @@ impl ConfigClient {
             key_path: key_path.to_owned(),
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
-            region: region.to_owned(),
             ip_addr_check_url: ip_addr_check_url.to_owned(),
+            aws_config,
         })
     }
 }
@@ -150,14 +170,14 @@ pub struct ConfigServer {
     /// AWS DNS Hosted Zone Id
     pub hosted_dns_zone_id: String,
 
-    /// AWS Region, like us-east-1
-    pub region: String,
-
     /// whether this run should make mutating changes or not
     pub is_dry_run: bool,
 
     /// How many seconds a Signed object is valid for, to lower the bounds on potential Replay Attacks
     pub max_time_ago_signed_at: TimeDelta,
+
+    /// Holds AWS CLi configuration like credentials and servers
+    pub aws_config: AWSCliConfig,
 }
 
 impl ConfigServer {
@@ -173,6 +193,9 @@ impl ConfigServer {
                 chrono::TimeDelta::seconds(secs as i64)
             });
 
+        let aws_access_key_id = args.aws_access_key_id.as_deref().map(|x| x.trim());
+        let aws_secret_access_key = args.aws_secret_access_key.as_deref().map(|x| x.trim());
+
         /* Check Empties */
         if s3_bucket.is_empty() {
             anyhow::bail!("S3 Bucket cannot be empty")
@@ -186,14 +209,20 @@ impl ConfigServer {
             anyhow::bail!("bucket ddns json path cannot be empty")
         }
 
+        let aws_config = AWSCliConfig {
+            region: region.to_owned(),
+            access_key_id: aws_access_key_id.map(|x| x.to_owned()),
+            secret_access_key: aws_secret_access_key.map(|x| x.to_owned()),
+        };
+
         Ok(ConfigServer {
             is_dry_run: args.is_dry_run,
             hosted_dns_zone_id: hosted_dns_zone_id.to_owned(),
             keys_search_path: keys_search_path.to_owned(),
             s3_bucket: s3_bucket.to_owned(),
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
-            region: region.to_owned(),
             max_time_ago_signed_at,
+            aws_config,
         })
     }
 }

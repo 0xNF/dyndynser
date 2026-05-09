@@ -10,7 +10,7 @@ homepage = "https://github.com/0xNF/dyndynser"
 repository = "https://github.com/0xNF/dyndynser"
 documentation = "https://github.com/0xNF/dyndynser"
 readme = "README.md"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 keywords = ["s3", "route53", "ddns", "signed", "x509"]
 categories = ["command-line-utilities", "network-programming"]
 

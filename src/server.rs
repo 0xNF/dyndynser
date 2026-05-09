@@ -110,6 +110,7 @@ impl<'a> DynDynserServer<'a> {
     fn get_s3_bucket(&self) -> Result<Box<s3::Bucket>, anyhow::Error> {
         let region = self
             .conf
+            .aws_config
             .region
             .parse()
             .context("invalid AWS region found during S3 write")?;
