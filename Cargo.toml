@@ -26,6 +26,7 @@ env_logger = "0.11.10"
 hex = "0.4.3"
 hmac = "0.13.0"
 log = "0.4.29"
+nix = { version = "0.31.2", features = ["user", "process"] }
 reqwest = { version = "0.13.3", features = ["blocking"] }
 rust-s3 = { version = "0.37.1", default-features = false, features = [
     "sync",

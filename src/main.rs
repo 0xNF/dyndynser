@@ -5,6 +5,7 @@ mod dns;
 mod keys;
 mod server;
 mod signatures;
+mod unix;
 
 use std::{collections::BTreeMap, sync::Mutex};
 
