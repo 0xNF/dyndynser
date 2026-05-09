@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     log::debug!("loading dyndynser");
     let cli_parsed = CLI::parse();
     match cli_parsed.command {
-        cli::SubCommands::Server(server_args) => server::handle_server(&server_args),
+        cli::SubCommands::Server(server_args) => server::handle_server(server_args),
         cli::SubCommands::Client(client_args) => client::handle_client(client_args),
     }
 }

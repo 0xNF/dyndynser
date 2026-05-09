@@ -192,49 +192,28 @@ pub struct ConfigServer {
 }
 
 impl ConfigServer {
-    pub fn parse(args: &ServerArgs) -> Result<Self, anyhow::Error> {
-        let s3_bucket = args.s3_bucket.trim();
-        let ddns_json_dir = args.s3_ddns_json_dir.trim();
-        let hosted_dns_zone_id = args.hosted_dns_zone_id.trim();
-        let keys_search_path = args.keys_search_path.trim();
-        let region = args.aws_region.trim();
+    pub fn parse(args: ServerArgs) -> Result<Self, anyhow::Error> {
         let max_time_ago_signed_at = args
             .max_time_ago_signed_at_secs
             .map_or(chrono::TimeDelta::hours(1), |secs| {
                 chrono::TimeDelta::seconds(secs as i64)
             });
 
-        let aws_access_key_id = args.aws_access_key_id.as_deref().map(|x| x.trim());
-        let aws_secret_access_key = args.aws_secret_access_key.as_deref().map(|x| x.trim());
-
-        /* Check Empties */
-        if s3_bucket.is_empty() {
-            anyhow::bail!("S3 Bucket cannot be empty")
-        } else if hosted_dns_zone_id.is_empty() {
-            anyhow::bail!("hosted_dns_zone_id cannot be empty")
-        } else if keys_search_path.is_empty() {
-            anyhow::bail!("keys search path cannot be empty")
-        } else if region.is_empty() {
-            anyhow::bail!("Amazon Region cannot be empty")
-        } else if ddns_json_dir.is_empty() {
-            anyhow::bail!("bucket ddns json path cannot be empty")
-        }
-
         let aws_config = AWSCliConfig {
-            region: region.to_owned(),
-            access_key_id: aws_access_key_id.map(|x| x.to_owned()),
-            secret_access_key: aws_secret_access_key.map(|x| x.to_owned()),
+            region: args.aws_region,
+            access_key_id: args.aws_access_key_id,
+            secret_access_key: args.aws_secret_access_key,
         };
 
         Ok(ConfigServer {
             is_dry_run: args.is_dry_run,
-            hosted_dns_zone_id: hosted_dns_zone_id.to_owned(),
-            keys_search_path: keys_search_path.to_owned(),
-            s3_bucket: s3_bucket.to_owned(),
-            s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
+            hosted_dns_zone_id: args.hosted_dns_zone_id,
+            keys_search_path: args.keys_search_path,
+            s3_bucket: args.s3_bucket,
+            s3_bucket_ddns_json_directory: args.s3_ddns_json_dir,
             max_time_ago_signed_at,
             aws_config,
-            drop_user: args.drop_user.to_owned(),
+            drop_user: args.drop_user,
         })
     }
 }

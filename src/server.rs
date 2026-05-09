@@ -456,7 +456,7 @@ impl<'a> DynDynserServer<'a> {
 }
 
 /// Runs the Server process
-pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error> {
+pub fn handle_server(server_args: cli::ServerArgs) -> Result<(), anyhow::Error> {
     let conf = ConfigServer::parse(server_args).context("failed to parse server config")?;
 
     /* Retrieve all the ddns requests from the s3 bucket */
