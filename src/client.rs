@@ -107,8 +107,7 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
             .region
             .parse()
             .context("invalid AWS region found during S3 write")?;
-        let credentials =
-            s3::creds::Credentials::default().context("failed to retrieve s3 credentials")?;
+        let credentials = conf.aws_config.get_s3_credentials()?;
         let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials)?;
 
         let s3_response = bucket

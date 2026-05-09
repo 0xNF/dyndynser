@@ -77,6 +77,25 @@ pub struct AWSCliConfig {
     pub secret_access_key: Option<String>,
 }
 
+impl AWSCliConfig {
+    /// Returns S3 credentials from this AWS Cli config.
+    /// If either Access Key Id or Secret Access Key are None, tries to return from the Default Instance Role
+    pub fn get_s3_credentials(&self) -> Result<s3::creds::Credentials, anyhow::Error> {
+        match (&self.access_key_id, &self.secret_access_key) {
+            (None, None) | (None, Some(_)) | (Some(_), None) => s3::creds::Credentials::default()
+                .context("failed to retrieve default s3 credentials"),
+            (Some(access_key_id), Some(secret_access_key)) => s3::creds::Credentials::new(
+                Some(access_key_id),
+                Some(secret_access_key),
+                None,
+                None,
+                None,
+            )
+            .context("failed to construct s3 credentials from supplied values"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConfigClient {
     /// S3 Bucket id to push $domain.json files

@@ -459,7 +459,7 @@ pub fn handle_server(server_args: &cli::ServerArgs) -> Result<(), anyhow::Error>
     let conf = ConfigServer::parse(server_args).context("failed to parse server config")?;
 
     /* Retrieve all the ddns requests from the s3 bucket */
-    let credentials = s3::creds::Credentials::default()?;
+    let credentials = conf.aws_config.get_s3_credentials()?;
 
     let dyndynser = DynDynserServer::with_config(&conf, &credentials);
 
