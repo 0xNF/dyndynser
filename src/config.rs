@@ -121,6 +121,9 @@ pub struct ConfigClient {
 
     /// Holds AWS CLi configuration like credentials and servers
     pub aws_config: AWSCliConfig,
+
+    /// After privileges are dropped, what user to drop down to
+    pub drop_user: String,
 }
 
 impl ConfigClient {
@@ -171,6 +174,7 @@ impl ConfigClient {
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             ip_addr_check_url: ip_addr_check_url.to_owned(),
             aws_config,
+            drop_user: args.drop_user.to_owned(),
         })
     }
 }
@@ -197,6 +201,9 @@ pub struct ConfigServer {
 
     /// Holds AWS CLi configuration like credentials and servers
     pub aws_config: AWSCliConfig,
+
+    /// After privileges are dropped, what user to drop down to
+    pub drop_user: String,
 }
 
 impl ConfigServer {
@@ -242,6 +249,7 @@ impl ConfigServer {
             s3_bucket_ddns_json_directory: ddns_json_dir.to_owned(),
             max_time_ago_signed_at,
             aws_config,
+            drop_user: args.drop_user.to_owned(),
         })
     }
 }

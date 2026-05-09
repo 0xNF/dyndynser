@@ -10,6 +10,7 @@ use crate::config::ConfigClient;
 use crate::dns;
 use crate::keys;
 use crate::signatures;
+use crate::unix;
 
 pub struct DynDynserClient<'a> {
     conf: &'a ConfigClient,
@@ -58,6 +59,25 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
         log::info!("Doing a dry run, will not make any mutating changes or API calls");
     }
 
+    /* Check if the key location is privelidged or not, in which case this is a Sudo-required operation */
+    //
+    // Three outcomes:
+    //   a) We're root          → succeeds, drop after
+    //   b) We're not root but  → succeeds (e.g. file is world-readable,
+    //      it works anyway
+    //                             skip drop
+    //   c) We're not root and  → EACCES/EPERM → "must be root" + exit
+    //      it fails
+
+    /* Find and load the keyfile bytes */
+    log::info!("Starting priveliged operations, will drop privs after");
+    let key_bytes = keys::read_file_limited(&conf.key_path, config::FILE_SIZE_MAX_BYTES)
+        .context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+    log::info!("Priveliged operations are over, attempting to drop privs now");
+    unix::maybe_drop_privileges(&conf.drop_user).context("failed to drop privileges")?;
+    let signing_key =
+        keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
+
     /* Get IP */
     log::info!("Querying for machine's IP addr");
     let ip = dyndynser
@@ -73,12 +93,6 @@ pub fn handle_client(args: &cli::ClientArgs) -> Result<(), anyhow::Error> {
             std::net::IpAddr::V6(ipv6_addr) => dns::RecordData::AAAA(vec![ipv6_addr]),
         },
     };
-
-    /* Find and load the keyfile bytes */
-    let key_bytes = keys::read_file_limited(conf.key_path, config::FILE_SIZE_MAX_BYTES)
-        .context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
-    let signing_key =
-        keys::load_ed25519_private_key(&key_bytes, args.signing_key_password.as_deref())?;
 
     let signable = signatures::SignableEnvelope::new(dns_obj);
     let signed_json_bytes = signable

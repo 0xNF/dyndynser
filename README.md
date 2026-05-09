@@ -1,4 +1,5 @@
 # Dyndynser
+This program targets FreeBSD and Linux. Other platforms are not supported.
 
 The purpose of this program is to securely request DDNS updates over Route53. The scope of this project is limited entirely to AWS EC2 instances which have a role for S3 buckets.
 
@@ -242,3 +243,15 @@ Options:
   -h, --help
           Print help
 ```
+
+
+# Design and Architecture
+
+This binary is built for both Linux and FreeBSD.
+
+It assumed a Privelige Dropping role, due to the Private Key material involved. After reading the necessary keys, it drops privs down to the minimal set.
+But it only does this opportunitsically. if the process is not root and the reads succeed, then privs are not dropped. If the reads don't succeed, the program tells you to run as root to read those keys. If the program _is_ root, then it drops privs after reading successfully.
+
+# Packaging
+Creates a `dyndynser` user and `dynsynser` group. Dyndynser user is put into the group.
+Creates `/etc/dyndynser`, with `770`, and ownership of `root:dyndynser`, such that the program can read its own configuration, but cannot write it, following the pattern set by `/etc/shadow`.

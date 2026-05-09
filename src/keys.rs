@@ -9,6 +9,7 @@ use x509_cert::der::oid::db::rfc4519::COMMON_NAME;
 use x509_cert::*;
 
 use crate::signatures;
+use crate::unix::MustBeRoot;
 
 #[derive(Debug)]
 pub struct CertMatch {
@@ -133,9 +134,11 @@ pub fn read_file_limited<P: AsRef<Path>>(
     path: P,
     max_bytes: u64,
 ) -> Result<Vec<u8>, anyhow::Error> {
-    let size = std::fs::metadata(&path)?.len();
+    let size = std::fs::metadata(&path)
+        .or_must_be_root("reading file metadata")?
+        .len();
 
-    /* Metadata check. This is not fail-safe, and so must be concretely checked further down. This is just an early escape. */
+    /* Metadata check. Not fail-safe; a concrete check follows below. Early escape only. */
     if size > max_bytes {
         anyhow::bail!(
             "File too large: {} bytes (limit: {} bytes)",
@@ -144,17 +147,15 @@ pub fn read_file_limited<P: AsRef<Path>>(
         );
     }
 
-    let file = std::fs::File::open(path)?;
+    let file = std::fs::File::open(&path).or_must_be_root("opening file")?;
+
     let mut buffer = Vec::with_capacity(size as usize);
 
-    /* Actual size-check occurs here, in absolutely-read bytes */
+    /* Actual size-check: read_to_end is capped at max_bytes by take() */
     std::io::BufReader::new(file)
         .take(max_bytes)
         .read_to_end(&mut buffer)
-        .context(anyhow::anyhow!(format!(
-            "File too large: {} bytes (limit: {} bytes)",
-            size, max_bytes
-        )))?;
+        .or_must_be_root("reading file")?;
 
     Ok(buffer)
 }

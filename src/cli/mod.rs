@@ -92,6 +92,13 @@ pub struct ServerArgs {
         help = "Maximum seconds in the past that a ddns request can be signed at before being rejected for being stale"
     )]
     pub max_time_ago_signed_at_secs: Option<u32>,
+
+    #[arg(
+        long = "drop-user",
+        help = "user to drop down to after priveliged operations are over",
+        default_value = "nobody"
+    )]
+    pub drop_user: String,
 }
 
 #[derive(clap::Args)]
@@ -162,4 +169,11 @@ pub struct ClientArgs {
         help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6"
     )]
     pub ip_addr_check_url: Option<String>,
+
+    #[arg(
+        long = "drop-user",
+        help = "user to drop down to after priveliged operations are over",
+        default_value = "nobody"
+    )]
+    pub drop_user: String,
 }
