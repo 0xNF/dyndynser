@@ -16,3 +16,7 @@ lint:
 
 test:
     cargo test
+
+# Build the .deb package (requires a release binary)
+make-deb arch="amd64":
+    bash packaging/debian/build.sh {{arch}}
