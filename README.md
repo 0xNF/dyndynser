@@ -68,6 +68,7 @@ graph TD
 ## Buiding
 
 * Rust 1.70+
+* Mise 2026.5.5+
   
 ```
 cargo build
