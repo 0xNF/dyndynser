@@ -8,12 +8,15 @@ setup:
 check: fmt-check lint test
     @echo "All checks passed ✓"
 
+# Checks formatting, does not auto-format files
 fmt-check:
     cargo fmt -- --check
 
+# Shows Clippy lints
 lint:
     cargo clippy -- -D warnings
 
+# Runs Cargo Tests
 test:
     cargo test
 
