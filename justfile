@@ -17,6 +17,11 @@ lint:
 test:
     cargo test
 
-# Build the .deb package (requires a release binary)
+# Build a release binary and package it (format: deb)
+package format="deb" arch="amd64":
+    cargo build --release
+    just make-{{format}} {{arch}}
+
+# Build just the .deb package (requires a release binary)
 make-deb arch="amd64":
     bash packaging/debian/build.sh {{arch}}
