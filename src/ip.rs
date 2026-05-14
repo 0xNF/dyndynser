@@ -13,8 +13,8 @@ pub fn handle_ip(args: cli::IPArgs) -> Result<(), anyhow::Error> {
     if conf.is_public {
         let dummy_config = ConfigClient {
             ip_addr_check_url: conf.ip_addr_check_url,
-            s3_bucket: String::from(""),
-            s3_bucket_ddns_json_directory: String::from(""),
+            s3_queue_bucket: String::from(""),
+            s3_ddns_json_directory: String::from(""),
             domain: DomainName::parse("sample.arpa").unwrap(),
             ttl: None,
             key_path: String::from(""),

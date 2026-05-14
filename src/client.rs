@@ -102,14 +102,14 @@ pub fn handle_client(args: cli::ClientArgs) -> Result<(), anyhow::Error> {
     /* Send to S3 */
     let ddns_json_path = format!(
         "{}/{}",
-        conf.s3_bucket_ddns_json_directory,
+        conf.s3_ddns_json_directory,
         dns_obj.make_filename()
     );
 
     if conf.is_dry_run {
         println!(
             "Will write to: s3://{}{}\nJSON:\n{}",
-            conf.s3_bucket,
+            conf.s3_queue_bucket,
             ddns_json_path,
             String::from_utf8_lossy(&signed_json_bytes)
         );
@@ -122,7 +122,7 @@ pub fn handle_client(args: cli::ClientArgs) -> Result<(), anyhow::Error> {
             .parse()
             .context("invalid AWS region found during S3 write")?;
         let credentials = conf.aws_config.get_s3_credentials()?;
-        let bucket = s3::Bucket::new(&conf.s3_bucket, region, credentials)?;
+        let bucket = s3::Bucket::new(&conf.s3_queue_bucket, region, credentials)?;
 
         let s3_response = bucket
             .put_object_with_content_type(&ddns_json_path, &signed_json_bytes, "application/json")

@@ -115,7 +115,7 @@ impl<'a> DynDynserServer<'a> {
             .region
             .parse()
             .context("invalid AWS region found during S3 write")?;
-        s3::Bucket::new(&self.conf.s3_bucket, region, self.credentials.clone())
+        s3::Bucket::new(&self.conf.s3_queue_bucket, region, self.credentials.clone())
             .context("failed to retrieve s3 credentials")
     }
 
@@ -134,7 +134,7 @@ impl<'a> DynDynserServer<'a> {
 
         println!(
             "Querying Bucket: {}/{}",
-            &self.conf.s3_bucket, &self.conf.s3_bucket_ddns_json_directory
+            &self.conf.s3_queue_bucket, &self.conf.s3_ddns_json_directory
         );
 
         /* S3 iteration  */
@@ -149,7 +149,7 @@ impl<'a> DynDynserServer<'a> {
             );
             let (list_result, _status_code) = bucket
                 .list_page(
-                    self.conf.s3_bucket_ddns_json_directory.clone(),
+                    self.conf.s3_ddns_json_directory.clone(),
                     Some(String::from("/")),
                     continuation_token,
                     None,

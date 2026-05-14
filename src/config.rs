@@ -98,11 +98,11 @@ impl AWSCliConfig {
 
 #[derive(Debug)]
 pub struct ConfigClient {
-    /// S3 Bucket id to push $domain.json files
-    pub s3_bucket: String,
+    /// S3 Bucket id to push -ddns.json files
+    pub s3_queue_bucket: String,
 
     /// Path on the S3 bucket to place -ddns.json files
-    pub s3_bucket_ddns_json_directory: String,
+    pub s3_ddns_json_directory: String,
 
     /// Domain that this client is configured to push for
     pub domain: DomainName,
@@ -148,12 +148,12 @@ impl ConfigClient {
             domain,
             ttl,
             key_path: args.key_path,
-            s3_bucket: args.s3_bucket,
-            s3_bucket_ddns_json_directory: args.s3_ddns_json_dir,
+            s3_queue_bucket: args.s3_bucket,
+            s3_ddns_json_directory: args.s3_ddns_json_dir,
             ip_addr_check_url: args.ip_addr_check_url,
             signing_key_password: args.signing_key_password,
             aws_config,
-            drop_user: args.drop_user,
+            drop_user: args.drop_to_user,
         })
     }
 }
@@ -164,10 +164,10 @@ pub struct ConfigServer {
     pub keys_search_path: String,
 
     /// S3 Bucket id to search for $domain.json files
-    pub s3_bucket: String,
+    pub s3_queue_bucket: String,
 
     /// Path on the S3 bucket to search for -ddns.json files
-    pub s3_bucket_ddns_json_directory: String,
+    pub s3_ddns_json_directory: String,
 
     /// AWS DNS Hosted Zone Id
     pub hosted_dns_zone_id: String,
@@ -199,11 +199,11 @@ impl ConfigServer {
             is_dry_run: args.is_dry_run,
             hosted_dns_zone_id: args.hosted_dns_zone_id,
             keys_search_path: args.keys_search_path,
-            s3_bucket: args.s3_bucket,
-            s3_bucket_ddns_json_directory: args.s3_ddns_json_dir,
+            s3_queue_bucket: args.s3_queue_bucket,
+            s3_ddns_json_directory: args.s3_ddns_json_dir,
             max_time_ago_signed_at,
             aws_config,
-            drop_user: args.drop_user,
+            drop_user: args.drop_to_user,
         })
     }
 }

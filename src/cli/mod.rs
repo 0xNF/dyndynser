@@ -67,7 +67,8 @@ pub struct ServerArgs {
     pub is_dry_run: bool,
 
     #[arg(long = "bucket", help = "S3 bucket name used as the DDNS backend", value_parser = trimmed_string)]
-    pub s3_bucket: String,
+    pub s3_queue_bucket: String,
+
     #[arg(
         long = "bucket-ddns-dir",
         help = "S3 key prefix (directory) for pending DDNS update JSON files",
@@ -135,12 +136,12 @@ pub struct ServerArgs {
     pub max_time_ago_signed_at_secs: u32,
 
     #[arg(
-        long = "drop-user",
+        long = "drop-to-user",
         help = "user to drop down to after priveliged operations are over",
-        default_value = "nobody",
+        default_value = "dyndynser",
         value_parser = trimmed_string
     )]
-    pub drop_user: String,
+    pub drop_to_user: String,
 }
 
 #[derive(clap::Args)]
@@ -227,10 +228,10 @@ pub struct ClientArgs {
     pub ip_addr_check_url: String,
 
     #[arg(
-        long = "drop-user",
+        long = "drop-to-user",
         help = "user to drop down to after priveliged operations are over",
-        default_value = "nobody",
+        default_value = "dyndynser",
         value_parser = trimmed_string
     )]
-    pub drop_user: String,
+    pub drop_to_user: String,
 }
