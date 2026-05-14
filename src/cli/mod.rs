@@ -30,6 +30,32 @@ pub enum SubCommands {
     /// Run in client mode, publishing a signed DDNS update request to S3 for the server to process.
     /// The update is cryptographically signed using the provided private key so the server can verify authenticity.
     Client(ClientArgs),
+
+    /// Gets information about the current ip address on this machine
+    IP(IPArgs),
+}
+
+#[derive(clap::Args)]
+pub struct IPArgs {
+    #[arg(
+        long = "ip-addr-check-url",
+        help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6",
+        value_parser = trimmed_string,
+        default_value="https://checkip.amazonaws.com"
+    )]
+    pub ip_addr_check_url: String,
+
+    #[arg(
+        long = "public",
+        help = "Fetches and displays the Public IP of this machine"
+    )]
+    pub get_public: bool,
+
+    #[arg(long = "force-ipv4", help = "Fails if the returned address isn't ipv4")]
+    pub force_ipv4: bool,
+
+    #[arg(long = "force-ipv6", help = "Fails if the returned address isn't ipv6")]
+    pub force_ipv6: bool,
 }
 
 #[derive(clap::Args)]
@@ -194,9 +220,11 @@ pub struct ClientArgs {
     #[arg(
         long = "ip-addr-check-url",
         help = "URL of service to use to check IP Address. Must return a bare ip-address in either v4 or v6",
-        value_parser = trimmed_string
+        value_parser = trimmed_string,
+            default_value="https://checkip.amazonaws.com"
+
     )]
-    pub ip_addr_check_url: Option<String>,
+    pub ip_addr_check_url: String,
 
     #[arg(
         long = "drop-user",

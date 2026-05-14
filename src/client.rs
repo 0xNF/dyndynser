@@ -23,7 +23,7 @@ impl<'a> DynDynserClient<'a> {
     }
 
     /// Queries a canonical Amazon AWS url for the IP of the machine running this binary
-    fn query_for_ip(&self) -> Result<std::net::IpAddr, anyhow::Error> {
+    pub fn query_for_ip(&self) -> Result<std::net::IpAddr, anyhow::Error> {
         let res = reqwest::blocking::get(&self.conf.ip_addr_check_url)
             .context("failed to check IP address")?;
         if res.status() != StatusCode::OK {

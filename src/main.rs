@@ -2,6 +2,7 @@ mod cli;
 mod client;
 mod config;
 mod dns;
+mod ip;
 mod keys;
 mod logging;
 mod server;
@@ -23,5 +24,6 @@ fn main() -> anyhow::Result<()> {
     match cli_parsed.command {
         cli::SubCommands::Server(server_args) => server::handle_server(server_args),
         cli::SubCommands::Client(client_args) => client::handle_client(client_args),
+        cli::SubCommands::IP(ip_args) => ip::handle_ip(ip_args),
     }
 }

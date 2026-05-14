@@ -70,9 +70,13 @@ graph TD
 * Rust 1.70+
 * Mise 2026.5.5+
   
+Plain:
 ```
 cargo build
 ```
+
+With Just and Mise:
+
 
 ## AWS Requirements
 * Writeable S3 bucket to store ddns request info

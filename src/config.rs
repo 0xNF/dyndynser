@@ -4,7 +4,7 @@ use anyhow::Context;
 use chrono::TimeDelta;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{self, ServerArgs};
+use crate::cli::{self, IPArgs, ServerArgs};
 
 /// We are dealing with keys, certificates, and small json files. We wil limit to at most 10kb
 pub const FILE_SIZE_MAX_BYTES: u64 = 10 * 1024;
@@ -130,14 +130,8 @@ pub struct ConfigClient {
 }
 
 impl ConfigClient {
-    const DEFAULT_IP_CHECK_URL: &str = "https://checkip.amazonaws.com";
-
     pub fn parse(args: cli::ClientArgs) -> Result<Self, anyhow::Error> {
         let ttl: Option<Duration> = args.ttl.map(|t| Duration::from_secs(t as u64));
-        let ip_addr_check_url = args
-            .ip_addr_check_url
-            .as_deref()
-            .unwrap_or(ConfigClient::DEFAULT_IP_CHECK_URL);
 
         /* Check Domain is valid */
         let domain = DomainName::parse(&args.domain)
@@ -156,7 +150,7 @@ impl ConfigClient {
             key_path: args.key_path,
             s3_bucket: args.s3_bucket,
             s3_bucket_ddns_json_directory: args.s3_ddns_json_dir,
-            ip_addr_check_url: ip_addr_check_url.to_owned(),
+            ip_addr_check_url: args.ip_addr_check_url,
             signing_key_password: args.signing_key_password,
             aws_config,
             drop_user: args.drop_user,
@@ -210,6 +204,38 @@ impl ConfigServer {
             max_time_ago_signed_at,
             aws_config,
             drop_user: args.drop_user,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct IPConfig {
+    /// URL to query for an IP Address
+    pub ip_addr_check_url: String,
+
+    /// Whether to get the Public IP
+    pub is_public: bool,
+
+    /// Fails if the returned address isn't ipv4
+    pub force_ipv4: bool,
+
+    /// Fails if the returned address isn't ipv6
+    pub force_ipv6: bool,
+}
+
+impl IPConfig {
+    pub fn parse(args: IPArgs) -> Result<Self, anyhow::Error> {
+        if args.force_ipv4 && args.force_ipv6 {
+            anyhow::bail!(
+                "force_ipv4 and force_ipv6 cannot both be true at the same time. Either leave both unset, or choose only one"
+            )
+        }
+
+        Ok(IPConfig {
+            ip_addr_check_url: args.ip_addr_check_url,
+            is_public: args.get_public,
+            force_ipv4: args.force_ipv4,
+            force_ipv6: args.force_ipv6,
         })
     }
 }
