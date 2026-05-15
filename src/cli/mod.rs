@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+const DEFAULT_DDNS_DIR: &str = "/ddns/requests";
+
 fn trimmed_string(s: &str) -> Result<String, String> {
     let trimmed = s.trim().to_string();
     if trimmed.is_empty() {
@@ -72,7 +74,9 @@ pub struct ServerArgs {
     #[arg(
         long = "bucket-ddns-dir",
         help = "S3 key prefix (directory) for pending DDNS update JSON files",
-        value_parser = trimmed_string
+        value_parser = trimmed_string,
+        default_value=DEFAULT_DDNS_DIR,
+
     )]
     pub s3_ddns_json_dir: String,
 
@@ -116,6 +120,7 @@ pub struct ServerArgs {
         long = "aws-access-key-id",
         help = "AWS Access Key Id",
         env = "AWS_ACCESS_KEY_ID",
+        hide_env_values = true,
         value_parser = trimmed_string
     )]
     pub aws_access_key_id: Option<String>,
@@ -124,6 +129,7 @@ pub struct ServerArgs {
         long = "aws-secret-access-key",
         help = "AWS Secret Access Key",
         env = "AWS_SECRET_ACCESS_KEY",
+        hide_env_values = true,
         value_parser = trimmed_string
     )]
     pub aws_secret_access_key: Option<String>,
@@ -157,21 +163,22 @@ pub struct ClientArgs {
         help = "S3 bucket name used as the DDNS backend",
         value_parser = trimmed_string
     )]
-    pub s3_bucket: String,
+    pub s3_queue_bucket: String,
 
     #[arg(
         long = "bucket-ddns-dir",
         help = "S3 key prefix (directory) for pending DDNS update JSON files",
-        value_parser = trimmed_string
+        value_parser = trimmed_string,
+        default_value=DEFAULT_DDNS_DIR,
     )]
     pub s3_ddns_json_dir: String,
 
     #[arg(
         long = "domain",
-        help = "Fully-qualified domain name to update (e.g. home.example.com)",
+        help = "Fully-qualified domain name to update (e.g. somepage.example)",
         value_parser = trimmed_string
     )]
-    pub domain: String,
+    pub domain_to_update: String,
 
     #[arg(
         long,
@@ -206,6 +213,7 @@ pub struct ClientArgs {
         long = "aws-access-key-id",
         help = "AWS Access Key Id",
         env = "AWS_ACCESS_KEY_ID",
+        hide_env_values = true,
         value_parser = trimmed_string
     )]
     pub aws_access_key_id: Option<String>,
@@ -214,6 +222,7 @@ pub struct ClientArgs {
         long = "aws-secret-access-key",
         help = "AWS Secret Access Key",
         env = "AWS_SECRET_ACCESS_KEY",
+        hide_env_values = true,
         value_parser = trimmed_string
     )]
     pub aws_secret_access_key: Option<String>,

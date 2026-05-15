@@ -134,7 +134,7 @@ impl ConfigClient {
         let ttl: Option<Duration> = args.ttl.map(|t| Duration::from_secs(t as u64));
 
         /* Check Domain is valid */
-        let domain = DomainName::parse(&args.domain)
+        let domain = DomainName::parse(&args.domain_to_update)
             .context("domain is invalid, must conform to RFC 1123")?;
 
         let aws_config = AWSCliConfig {
@@ -148,7 +148,7 @@ impl ConfigClient {
             domain,
             ttl,
             key_path: args.key_path,
-            s3_queue_bucket: args.s3_bucket,
+            s3_queue_bucket: args.s3_queue_bucket,
             s3_ddns_json_directory: args.s3_ddns_json_dir,
             ip_addr_check_url: args.ip_addr_check_url,
             signing_key_password: args.signing_key_password,
@@ -182,7 +182,7 @@ pub struct ConfigServer {
     pub aws_config: AWSCliConfig,
 
     /// After privileges are dropped, what user to drop down to
-    pub drop_user: String,
+    pub drop_to_user: String,
 }
 
 impl ConfigServer {
@@ -203,7 +203,7 @@ impl ConfigServer {
             s3_ddns_json_directory: args.s3_ddns_json_dir,
             max_time_ago_signed_at,
             aws_config,
-            drop_user: args.drop_to_user,
+            drop_to_user: args.drop_to_user,
         })
     }
 }

@@ -505,7 +505,7 @@ pub fn handle_server(server_args: cli::ServerArgs) -> Result<(), anyhow::Error> 
         &mut errors,
     );
     log::info!("Priveliged operations are over, attempting to drop privs now");
-    unix::maybe_drop_privileges(&conf.drop_user).context("failed to drop privileges")?;
+    unix::maybe_drop_privileges(&conf.drop_to_user).context("failed to drop privileges")?;
 
     if verified_ddns_requests.is_empty() {
         println!("No verified requests found, nothing to do.");

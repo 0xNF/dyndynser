@@ -16,7 +16,14 @@ pub fn maybe_drop_privileges(username: &str) -> Result<(), anyhow::Error> {
     // Root path: full drop, same as before
     let user = User::from_name(username)
         .context("failed to check user exists")?
-        .ok_or(anyhow::anyhow!("user '{}' not found", username))?;
+        .or_else(|| {
+            log::warn!("user '{}' not found, falling back to 'nobody'", username);
+            User::from_name("nobody").ok().flatten()
+        })
+        .ok_or(anyhow::anyhow!(
+            "user '{}' not found and fallback 'nobody' also not found",
+            username
+        ))?;
 
     let uid = user.uid;
     let gid = user.gid;
@@ -33,7 +40,7 @@ pub fn maybe_drop_privileges(username: &str) -> Result<(), anyhow::Error> {
         anyhow::bail!("re-escalation succeeded — aborting");
     }
 
-    log::info!("[+] Dropped privileges to '{}'", username);
+    log::info!("[+] Dropped privileges to '{}'", user.name);
     Ok(())
 }
 /// Maps EACCES/EPERM specifically to a "must be root" message.
