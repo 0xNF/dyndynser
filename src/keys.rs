@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Context, Ok};
+use ed25519_dalek::{SECRET_KEY_LENGTH, SigningKey};
 use ed25519_dalek::{VerifyingKey, pkcs8::DecodePrivateKey};
 use x509_cert::der::DecodePem;
 use x509_cert::der::asn1::{PrintableStringRef, Utf8StringRef};
@@ -83,6 +84,14 @@ pub fn load_ed25519_private_key(
     };
 
     Ok(signing_key)
+}
+
+/// Returns a dummy signing key initalized from an array of 32 0's.
+///
+/// N.B: Do not use this except for when `insecure_skip_verify` is enabled.
+/// We generate a dummy key so that the overall structure of the serialization can remain in-tact even when no signing is requested
+pub fn dummy_ed25519_private_key() -> ed25519_dalek::SigningKey {
+    SigningKey::from_bytes(&[0; SECRET_KEY_LENGTH])
 }
 
 /// Parses the given bytes as an Ed25519 formatted OpenSSH private key

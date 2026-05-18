@@ -26,6 +26,7 @@ pub fn handle_ip(args: cli::IPArgs) -> Result<(), anyhow::Error> {
                 secret_access_key: None,
             },
             drop_user: String::from(""),
+            insecure_skip_verify: false,
         };
         let dyndynser = DynDynserClient::with_config(&dummy_config);
 

@@ -148,6 +148,13 @@ pub struct ServerArgs {
         value_parser = trimmed_string
     )]
     pub drop_to_user: String,
+
+    #[arg(
+        long = "insecure-skip-verify",
+        help = "Don't attempt signature validation, accept any request uncritically",
+        default_value_t = false
+    )]
+    pub insecure_skip_verify: bool,
 }
 
 #[derive(clap::Args)]
@@ -243,4 +250,11 @@ pub struct ClientArgs {
         value_parser = trimmed_string
     )]
     pub drop_to_user: String,
+
+    #[arg(
+        long = "insecure-skip-verify",
+        help = "Don't sign the dns request",
+        default_value_t = false
+    )]
+    pub insecure_skip_verify: bool,
 }

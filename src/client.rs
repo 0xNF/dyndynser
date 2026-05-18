@@ -59,24 +59,30 @@ pub fn handle_client(args: cli::ClientArgs) -> Result<(), anyhow::Error> {
         log::info!("Doing a dry run, will not make any mutating changes or API calls");
     }
 
-    /* Check if the key location is privelidged or not, in which case this is a Sudo-required operation */
-    //
-    // Three outcomes:
-    //   a) We're root          → succeeds, drop after
-    //   b) We're not root but  → succeeds (e.g. file is world-readable,
-    //      it works anyway
-    //                             skip drop
-    //   c) We're not root and  → EACCES/EPERM → "must be root" + exit
-    //      it fails
+    /* if insecure_skip_verify is not set, check if the key location is privelidged or not, in which case this is a Sudo-required operation
+    Three outcomes:
+      a) We're root          → succeeds, drop after
+      b) We're not root but  → succeeds (e.g. file is world-readable,
+         it works anyway
+                                skip drop
+      c) We're not root and  → EACCES/EPERM → "must be root" + exit
+         it fails
+    */
 
     /* Find and load the keyfile bytes */
-    log::info!("Starting priveliged operations, will drop privs after");
-    let key_bytes = keys::read_file_limited(&conf.key_path, config::FILE_SIZE_MAX_BYTES)
-        .context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
-    log::info!("Priveliged operations are over, attempting to drop privs now");
-    unix::maybe_drop_privileges(&conf.drop_user).context("failed to drop privileges")?;
-    let signing_key =
-        keys::load_ed25519_private_key(&key_bytes, conf.signing_key_password.as_deref())?;
+    let signing_key: ed25519_dalek::SigningKey = {
+        if conf.insecure_skip_verify {
+            /* get our all-0 key so we can continue to sign correctly, even though ts fake */
+            keys::dummy_ed25519_private_key()
+        } else {
+            log::info!("Starting priveliged operations, will drop privs after");
+            let key_bytes = keys::read_file_limited(&conf.key_path, config::FILE_SIZE_MAX_BYTES)
+                .context("invalid key_path")?; // 10kb at most, to maybe account for RSA8192?
+            log::info!("Priveliged operations are over, attempting to drop privs now");
+            unix::maybe_drop_privileges(&conf.drop_user).context("failed to drop privileges")?;
+            keys::load_ed25519_private_key(&key_bytes, conf.signing_key_password.as_deref())?
+        }
+    };
 
     /* Get IP */
     log::info!("Querying for machine's IP addr");

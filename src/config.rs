@@ -127,6 +127,9 @@ pub struct ConfigClient {
 
     /// After privileges are dropped, what user to drop down to
     pub drop_user: String,
+
+    /// Don't validate the signature, accept updates uncritically
+    pub insecure_skip_verify: bool,
 }
 
 impl ConfigClient {
@@ -154,6 +157,7 @@ impl ConfigClient {
             signing_key_password: args.signing_key_password,
             aws_config,
             drop_user: args.drop_to_user,
+            insecure_skip_verify: args.insecure_skip_verify,
         })
     }
 }
@@ -183,6 +187,9 @@ pub struct ConfigServer {
 
     /// After privileges are dropped, what user to drop down to
     pub drop_to_user: String,
+
+    /// Don't validate the signature, accept updates uncritically
+    pub insecure_skip_verify: bool,
 }
 
 impl ConfigServer {
@@ -204,6 +211,7 @@ impl ConfigServer {
             max_time_ago_signed_at,
             aws_config,
             drop_to_user: args.drop_to_user,
+            insecure_skip_verify: args.insecure_skip_verify,
         })
     }
 }

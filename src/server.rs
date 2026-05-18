@@ -53,31 +53,34 @@ impl UnverifiedDdnsRequest {
         &'_ self,
         vk: VerifyingKey,
         max_time_ago: chrono::TimeDelta,
+        insecure_skip_verify: bool,
     ) -> Result<VerifiedDdnsRequest<'_>, anyhow::Error> {
-        /* if key is found, try to validate the signature */
-        vk.verify_strict(
-            &serde_json_canonicalizer::to_vec(&self.signed_payload.envelope)
-                .context("failed to re-serialize during signature check")?,
-            self.signed_payload.signature.inner(),
-        )
-        .context("ddns json signature did not match")?;
+        if !insecure_skip_verify {
+            /* if key is found, try to validate the signature */
+            vk.verify_strict(
+                &serde_json_canonicalizer::to_vec(&self.signed_payload.envelope)
+                    .context("failed to re-serialize during signature check")?,
+                self.signed_payload.signature.inner(),
+            )
+            .context("ddns json signature did not match")?;
 
-        let signed_at = chrono::DateTime::from_timestamp(
-            self.signed_payload.envelope.signed_at_unix_secs,
-            0,
-        )
-        .ok_or_else(|| anyhow::anyhow!("could not construct a timestamp for this envelope"))?;
+            let signed_at = chrono::DateTime::from_timestamp(
+                self.signed_payload.envelope.signed_at_unix_secs,
+                0,
+            )
+            .ok_or_else(|| anyhow::anyhow!("could not construct a timestamp for this envelope"))?;
 
-        let tolerance = chrono::Duration::seconds(15); /* Clock Drift */
+            let tolerance = chrono::Duration::seconds(15); /* Clock Drift */
 
-        let max_age_permitted = signed_at + max_time_ago + tolerance;
-        let now = chrono::Utc::now();
-        if max_age_permitted < now {
-            anyhow::bail!(
-                "Signature is too old (age: {}s, max: {}s)",
-                (now - signed_at).num_seconds(),
-                max_time_ago.num_seconds(),
-            );
+            let max_age_permitted = signed_at + max_time_ago + tolerance;
+            let now = chrono::Utc::now();
+            if max_age_permitted < now {
+                anyhow::bail!(
+                    "Signature is too old (age: {}s, max: {}s)",
+                    (now - signed_at).num_seconds(),
+                    max_time_ago.num_seconds(),
+                );
+            }
         }
 
         let verified = VerifiedDdnsRequest {
@@ -288,6 +291,7 @@ impl<'a> DynDynserServer<'a> {
         &self,
         domain_certs: &[CertMatch],
         unverified_ddns_requests: &'a [UnverifiedDdnsRequest],
+        insecure_skip_verify: bool,
         errors: &mut ServerErrors,
     ) -> Vec<VerifiedDdnsRequest<'a>> {
         let mut verified_requests: Vec<VerifiedDdnsRequest<'a>> =
@@ -303,6 +307,7 @@ impl<'a> DynDynserServer<'a> {
                 unverified_request,
                 domain_certs,
                 self.conf.max_time_ago_signed_at,
+                insecure_skip_verify,
             )
             .context("failed to check signing key request")
             {
@@ -340,35 +345,46 @@ impl<'a> DynDynserServer<'a> {
         unverified_request: &'a UnverifiedDdnsRequest,
         domain_key_map: &[CertMatch],
         max_time_ago: TimeDelta,
+        insecure_skip_verify: bool,
     ) -> Result<VerifiedDdnsRequest<'a>, anyhow::Error> {
         /* Look for Matching Key of domain */
-        log::info!(
-            "looking for key that matches '{}'",
-            &unverified_request.signed_payload.envelope.payload.name
-        );
-        let matching_certificate = domain_key_map
-            .iter()
-            .find(|x| x.common_name == unverified_request.signed_payload.envelope.payload.name)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Received ddns request for domain '{}', but no matching key could be found",
-                    &unverified_request.signed_payload.envelope.payload.name,
-                )
-            })?;
+        let verifying_key: ed25519_dalek::VerifyingKey = {
+            if insecure_skip_verify {
+                keys::dummy_ed25519_private_key().verifying_key()
+            } else {
+                log::info!(
+                    "looking for key that matches '{}'",
+                    &unverified_request.signed_payload.envelope.payload.name
+                );
+                let matching_certificate = domain_key_map
+                .iter()
+                .find(|x| x.common_name == unverified_request.signed_payload.envelope.payload.name)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Received ddns request for domain '{}', but no matching key could be found",
+                        &unverified_request.signed_payload.envelope.payload.name,
+                    )
+                })?;
 
-        /* if key is found, try to validate the signature */
+                /* if key is found, try to validate the signature */
 
-        matching_certificate
-            .verifying_key
-            .verify_strict(
-                &serde_json_canonicalizer::to_vec(&unverified_request.signed_payload.envelope)
-                    .context("failed to re-serialize during signature check")?,
-                unverified_request.signed_payload.signature.inner(),
-            )
-            .context("ddns json signature did not match")?;
+                matching_certificate
+                    .verifying_key
+                    .verify_strict(
+                        &serde_json_canonicalizer::to_vec(
+                            &unverified_request.signed_payload.envelope,
+                        )
+                        .context("failed to re-serialize during signature check")?,
+                        unverified_request.signed_payload.signature.inner(),
+                    )
+                    .context("ddns json signature did not match")?;
+
+                matching_certificate.verifying_key
+            }
+        };
 
         unverified_request
-            .validate(matching_certificate.verifying_key, max_time_ago)
+            .validate(verifying_key, max_time_ago, insecure_skip_verify)
             .context("Did not successfully validate the request")
     }
 
@@ -487,24 +503,36 @@ pub fn handle_server(server_args: cli::ServerArgs) -> Result<(), anyhow::Error> 
 
     /* Step 2: Validate the requests */
 
-    /* Get Keys */
-    let domain_certs = dyndynser
-        .get_public_key_map(&mut errors)
-        .context("failed to get public key map")?;
-    log::debug!("known domain keys: {:?}", &domain_certs);
+    let verified_ddns_requests = {
+        let domain_certs: Vec<CertMatch> = {
+            if conf.insecure_skip_verify {
+                Vec::new()
+            } else {
+                /* Get Keys */
+                let domain_certs = dyndynser
+                    .get_public_key_map(&mut errors)
+                    .context("failed to get public key map")?;
+                log::debug!("known domain keys: {:?}", &domain_certs);
 
-    /* Check Keys exist */
-    if domain_certs.is_empty() {
-        println!("No public keys found, nothing to validate.");
-        return Ok(());
-    }
+                /* Check Keys exist */
+                if domain_certs.is_empty() {
+                    println!("No public keys found, nothing to validate.");
+                    return Ok(());
+                }
+                domain_certs
+            }
+        };
 
-    let verified_ddns_requests = dyndynser.validate_unverified_dns_requests(
-        &domain_certs,
-        &unverified_ddns_requests,
-        &mut errors,
-    );
-    log::info!("Priveliged operations are over, attempting to drop privs now");
+        let verified_ddns_requests = dyndynser.validate_unverified_dns_requests(
+            &domain_certs,
+            &unverified_ddns_requests,
+            conf.insecure_skip_verify,
+            &mut errors,
+        );
+        log::info!("Priveliged operations are over, attempting to drop privs now");
+
+        verified_ddns_requests
+    };
     unix::maybe_drop_privileges(&conf.drop_to_user).context("failed to drop privileges")?;
 
     if verified_ddns_requests.is_empty() {
@@ -704,6 +732,7 @@ mod test {
             &unverified,
             &[cert],
             chrono::TimeDelta::seconds(60),
+            false,
         );
         assert!(res.is_ok(), "expected signature to pass validation");
     }
